@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-29T23:01:11.544Z",
+  "title": "Design System: Prospecta",
+  "extensions": {
+    "colorMeta": {
+      "background": { "role": "neutral", "displayName": "Carbon Canvas", "canonical": "#0a0b0b", "tonalRamp": ["#0a0b0b", "#151616", "#242626", "#373a38", "#555a56", "#7a807a", "#adb3ad", "#f0f2ed"] },
+      "rail-background": { "role": "neutral", "displayName": "Rail Charcoal", "canonical": "#0d0e0e", "tonalRamp": ["#0d0e0e", "#171818", "#272928", "#3a3c3a", "#585b57", "#7d827c", "#afb5ae", "#f0f2ed"] },
+      "surface": { "role": "neutral", "displayName": "Panel Charcoal", "canonical": "#151616", "tonalRamp": ["#0a0b0b", "#151616", "#242626", "#373a38", "#555a56", "#7a807a", "#adb3ad", "#f0f2ed"] },
+      "surface-soft": { "role": "neutral", "displayName": "Soft Charcoal", "canonical": "#111212", "tonalRamp": ["#0a0b0b", "#111212", "#222423", "#353735", "#535752", "#787e77", "#abb2aa", "#f0f2ed"] },
+      "surface-raised": { "role": "neutral", "displayName": "Raised Charcoal", "canonical": "#1b1c1c", "tonalRamp": ["#0a0b0b", "#1b1c1c", "#2a2c2b", "#3d403e", "#5b5f5b", "#808680", "#b2b9b1", "#f0f2ed"] },
+      "text": { "role": "neutral", "displayName": "Fog White", "canonical": "#f0f2ed", "tonalRamp": ["#0a0b0b", "#191a19", "#292b29", "#404340", "#606560", "#858b85", "#b9bfb8", "#f0f2ed"] },
+      "muted": { "role": "neutral", "displayName": "Quiet Gray", "canonical": "#8b908b", "tonalRamp": ["#101111", "#202221", "#343735", "#4e524e", "#6b716b", "#8b908b", "#bbc0ba", "#f0f2ed"] },
+      "faint": { "role": "neutral", "displayName": "Ash Gray", "canonical": "#606560", "tonalRamp": ["#101111", "#202221", "#343735", "#4e524e", "#606560", "#858b85", "#bbc0ba", "#f0f2ed"] },
+      "accent": { "role": "primary", "displayName": "Prospecta Lime", "canonical": "#8ee343", "tonalRamp": ["#17320c", "#254d13", "#386d1a", "#5a9c2d", "#8ee343", "#a8ed68", "#c1f296", "#def9c8"] },
+      "accent-hover": { "role": "primary", "displayName": "Lime Hover", "canonical": "#b2f276", "tonalRamp": ["#1b3811", "#2f571a", "#477b24", "#72ae3a", "#a0e765", "#b2f276", "#c8f5a0", "#e5fbd3"] },
+      "danger": { "role": "error", "displayName": "Signal Red", "canonical": "#f06464", "tonalRamp": ["#451616", "#681e1e", "#8a2828", "#b43838", "#d94f4f", "#f06464", "#f5968e", "#fce0dd"] },
+      "auth-background": { "role": "neutral", "displayName": "Auth Black", "canonical": "#050807", "tonalRamp": ["#050807", "#111513", "#252927", "#3b403d", "#5a605d", "#818783", "#b8bdb9", "#edf5f0"] },
+      "auth-surface": { "role": "neutral", "displayName": "Auth Green-Black", "canonical": "#07100d", "tonalRamp": ["#07100d", "#141a17", "#282f2b", "#414945", "#626a65", "#89918c", "#bac1bd", "#edf5f0"] },
+      "auth-text": { "role": "neutral", "displayName": "Auth White", "canonical": "#edf5f0", "tonalRamp": ["#07100d", "#181e1b", "#2b322e", "#454c48", "#68706b", "#8f9792", "#bdc4c0", "#edf5f0"] },
+      "auth-muted": { "role": "neutral", "displayName": "Auth Sage", "canonical": "#879f92", "tonalRamp": ["#101713", "#202923", "#374239", "#536055", "#6e8174", "#879f92", "#b5c4bb", "#edf5f0"] }
+    },
+    "shadows": [
+      { "name": "primary-action", "value": "0 8px 20px rgba(142,227,67,0.12)", "purpose": "Soft emphasis under the primary CTA only." },
+      { "name": "overlay", "value": "0 16px 42px rgba(0,0,0,0.42)", "purpose": "Separate popovers and dialogs from the canvas." }
+    ],
+    "motion": [
+      { "name": "standard", "value": "180ms ease", "purpose": "Button, navigation, and surface state changes." },
+      { "name": "row-hover", "value": "160ms ease", "purpose": "Quiet lead-row hover transition." }
+    ],
+    "breakpoints": [
+      { "name": "tablet", "value": "1120px" },
+      { "name": "mobile", "value": "760px" },
+      { "name": "small-mobile", "value": "390px" }
+    ]
+  },
+  "components": [
+    { "name": "Primary Button", "kind": "button", "refersTo": "button-primary", "description": "Main CRM action.", "html": "<button class=\"ds-button-primary\">Adicionar lead</button>", "css": ".ds-button-primary { padding: 10px 14px; color: #11130f; background: #8ee343; border: 1px solid #8ee343; border-radius: 10px; font: 700 12px Geist, Arial, sans-serif; transition: background-color 180ms ease, transform 180ms ease; } .ds-button-primary:hover { background: #b2f276; border-color: #b2f276; transform: translateY(-1px); } .ds-button-primary:focus-visible { outline: 2px solid #f0f2ed; outline-offset: 2px; }" },
+    { "name": "Secondary Button", "kind": "button", "refersTo": "button-secondary", "description": "Supporting action on dark surfaces.", "html": "<button class=\"ds-button-secondary\">Ver detalhes</button>", "css": ".ds-button-secondary { padding: 10px 14px; color: #f0f2ed; background: #1b1c1c; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; font: 700 12px Geist, Arial, sans-serif; transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease; } .ds-button-secondary:hover { color: #8ee343; background: #222522; border-color: rgba(142,227,67,.4); } .ds-button-secondary:focus-visible { outline: 2px solid #8ee343; outline-offset: 2px; }" },
+    { "name": "Dashboard Card", "kind": "card", "refersTo": "dashboard-card", "description": "Border-led panel for one coherent data group.", "html": "<section class=\"ds-card\"><span class=\"ds-label\">Visão do pipeline</span><h2>Seu pipeline ainda está vazio</h2><p>Adicione um lead para acompanhar a evolução por estágio.</p></section>", "css": ".ds-card { padding: 21px; color: #f0f2ed; background: #151616; border: 1px solid rgba(255,255,255,.08); border-radius: 17px; } .ds-card h2 { margin: 8px 0; font: 620 16px/1.3 Geist, Arial, sans-serif; letter-spacing: -.035em; } .ds-card p { margin: 0; color: #8b908b; font: 400 11px/1.5 Geist, Arial, sans-serif; } .ds-card:hover { border-color: rgba(255,255,255,.14); } .ds-label { color: #8b908b; font: 600 10px/1.4 Geist, Arial, sans-serif; text-transform: uppercase; letter-spacing: .03em; }" },
+    { "name": "Search Input", "kind": "input", "refersTo": "search-input", "description": "Compact search field with a clear focus state.", "html": "<label class=\"ds-search\"><span aria-hidden=\"true\">⌕</span><input aria-label=\"Buscar leads\" placeholder=\"Buscar leads...\"></label>", "css": ".ds-search { display: flex; align-items: center; gap: 9px; padding: 0 10px; color: #8b908b; background: #111212; border: 1px solid rgba(255,255,255,.14); border-radius: 8px; } .ds-search input { width: 100%; min-width: 0; padding: 9px 0; color: #f0f2ed; background: transparent; border: 0; outline: 0; font: 400 11px Geist, Arial, sans-serif; } .ds-search:focus-within { border-color: #8ee343; box-shadow: 0 0 0 3px rgba(142,227,67,.14); } .ds-search input::placeholder { color: #606560; }" },
+    { "name": "Navigation Item", "kind": "nav", "refersTo": "nav-active", "description": "Compact icon-rail item; active state uses a restrained lime tint.", "html": "<a class=\"ds-nav ds-nav-active\" href=\"#overview\"><span aria-hidden=\"true\">◫</span><span>Visão geral</span></a>", "css": ".ds-nav { display: flex; align-items: center; gap: 10px; padding: 10px; color: #747a75; background: transparent; border-radius: 12px; font: 600 11px Geist, Arial, sans-serif; text-decoration: none; transition: color 180ms ease, background-color 180ms ease; } .ds-nav:hover { color: #f0f2ed; background: rgba(255,255,255,.05); } .ds-nav-active { color: #8ee343; background: rgba(142,227,67,.14); } .ds-nav:focus-visible { outline: 2px solid #8ee343; outline-offset: 2px; }" },
+    { "name": "Status Badge", "kind": "chip", "refersTo": "lead-status", "description": "Small semantic label for an existing lead status.", "html": "<span class=\"ds-status\">Qualificado</span>", "css": ".ds-status { display: inline-flex; align-items: center; padding: 4px 7px; color: #a5e07b; background: rgba(142,227,67,.13); border-radius: 999px; font: 600 9px/1.2 Geist, Arial, sans-serif; }" }
+  ],
+  "narrative": {
+    "northStar": "CRM de prospecção preciso e sereno",
+    "overview": "Prospecta is a compact, data-first workspace for moving real leads through a sales pipeline. The interface should feel calm and capable: a near-black canvas, clear text contrast, concise labels, and a single vivid green action color. The design is intentionally quiet so lead details, statuses, and next actions remain the focus.\n\nThe CRM shell is the visual authority for authenticated pages. Login and onboarding are separate dark surfaces, not alternate dashboard themes: preserve their media-led layout, green-gray input treatment, and white primary action. The light declarations at global :root do not override the dark tokens inside .crm-shell.",
+    "keyCharacteristics": ["Dense enough for daily operations, with deliberate whitespace between major sections.", "Flat, border-led surfaces; depth comes from small tonal changes, not stacked shadows or blur.", "Lime is reserved for primary actions, active navigation, and meaningful progress/status.", "Empty states explain the next useful action and never imply records that do not exist."],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Use lime to identify action or state, not as a large decorative wash. Keep normal dividers and secondary text neutral.", "section": "colors" },
+      { "name": "The Real-Data Rule", "body": "Counts, activity copy, and lead names must come from the live application state. In previews, use the true empty state or clearly label illustrative content.", "section": "typography" }
+    ],
+    "dos": ["Keep the dashboard's information hierarchy compact, left-aligned, and data-first.", "Use asymmetric grids for pipeline, activity, and supporting information.", "Preserve real-data loading, empty, error, and success states.", "Use understated hover/focus treatments and maintain keyboard-visible focus.", "Respect reduced-motion preferences for animation."],
+    "donts": ["Don't create sample leads, fake revenue, invented activity, placeholder people, or fabricated counts.", "Don't use purple gradients, glass on every surface, or generic centered-hero compositions.", "Don't turn dashboard sections into three interchangeable cards; the existing four KPI cards are justified by distinct pipeline metrics.", "Don't make row hover bright white or use high-contrast borders as decoration.", "Don't use Inter as the default font or replace the login's white CTA with dashboard styling."]
+  }
+}

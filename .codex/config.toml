@@ -1,0 +1,7 @@
+[mcp_servers.shadcn]
+command = "pnpm"
+args = ["dlx", "--package=shadcn@latest", "shadcn", "mcp"]
+
+[mcp_servers.heroui-react]
+command = "pnpm"
+args = ["dlx", "--package=@heroui/react-mcp@latest", "heroui-react-mcp"]
