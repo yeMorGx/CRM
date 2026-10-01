@@ -6,8 +6,9 @@ import { createClient as createSessionClient } from "@/lib/supabase/server";
 const stageNames: Record<string, string> = {
   novo: "Novo",
   contatado: "Contatado",
-  qualificado: "Qualificado",
+  qualificado: "Em negociação",
   fechado: "Fechado",
+  descartado: "Descartado",
 };
 
 type EventType = "lead_created" | "lead_stage_changed" | "task_created" | "task_completed" | "event_scheduled";

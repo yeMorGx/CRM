@@ -1,9 +1,11 @@
 "use client"
 
-import { useState, type ReactNode } from "react"
+import { Fragment, useMemo, useState, type ReactNode, type RefObject } from "react"
 
-import { CircleCheck, CircleX, Clock3, X } from "lucide-react"
+import { CircleCheck, CircleX, Clock3, Users, X } from "lucide-react"
 import Image from "next/image"
+import { ChatAudioPlayer } from "@/components/chat-audio-player"
+import { ChatImageLightbox } from "@/components/chat-image-lightbox"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Bubble, BubbleContent } from "@/components/ui/bubble"
@@ -21,6 +23,10 @@ export type ChatMessage = {
   content: string
   image_path: string | null
   image_url?: string | null
+  message_type?: "text" | "audio"
+  audio_path?: string | null
+  audio_url?: string | null
+  audio_duration_seconds?: number | null
   sender_id: string
   created_at: string
 }
@@ -44,7 +50,29 @@ type ConversationThreadProps = {
   error: string
   onRetry: () => void
   headerAction?: ReactNode
+  groupAvatarUrl?: string | null
+  onGroupAvatarClick?: () => void
+  feedRef?: RefObject<HTMLDivElement | null>
+  onFeedScroll?: () => void
+  onScrollToBottom?: () => void
+  pendingCount?: number
+  firstUnreadId?: string | null
   children: ReactNode
+}
+
+function localDay(value: string) {
+  const date = new Date(value)
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+}
+
+function dayLabel(value: string) {
+  const day = localDay(value)
+  const today = localDay(new Date().toISOString())
+  const difference = Math.round((today - day) / 86_400_000)
+  if (difference === 0) return "Hoje"
+  if (difference === 1) return "Ontem"
+  if (difference > 1 && difference < 7) return new Intl.DateTimeFormat("pt-BR", { weekday: "long" }).format(new Date(value))
+  return new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value))
 }
 
 function initials(name: string) {
@@ -88,22 +116,30 @@ export function ConversationThread({
   error,
   onRetry,
   headerAction,
+  groupAvatarUrl,
+  onGroupAvatarClick,
+  feedRef,
+  onFeedScroll,
+  onScrollToBottom,
+  pendingCount = 0,
+  firstUnreadId,
   children,
 }: ConversationThreadProps) {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null)
+  const [activeAudioId, setActiveAudioId] = useState<string | null>(null)
+  const images = useMemo(() => messages.filter((message) => message.image_url && message.image_path).map((message) => ({ id: message.id, url: message.image_url!, path: message.image_path!, sender: senderProfiles[message.sender_id]?.full_name || "Equipe" })), [messages, senderProfiles])
+  const unreadMarkerId = firstUnreadId && (messages.some((message) => message.id === firstUnreadId) ? firstUnreadId : messages.find((message) => message.sender_id !== userId)?.id)
 
-  return (
+  return (<>
     <Card className="workspace-chat-card">
       <CardHeader className="workspace-chat-header">
-        <Avatar size="sm" className="workspace-chat-team-avatar">
-          <AvatarImage src={profile?.avatar_url ?? undefined} alt="" />
-          <AvatarFallback
-            className="workspace-chat-team-avatar-fallback"
-            style={{ backgroundColor: profile?.avatar_color ?? "var(--crm-lime)", color: "#11130f" }}
-          >
-            {initials(currentUserName(profile))}
-          </AvatarFallback>
-        </Avatar>
+        <button type="button" className="workspace-chat-group-photo-button" onClick={onGroupAvatarClick} disabled={!onGroupAvatarClick} aria-label={onGroupAvatarClick ? "Trocar foto do grupo" : "Foto do grupo"} title={onGroupAvatarClick ? "Trocar foto do grupo" : undefined}>
+          <Avatar size="sm" className="workspace-chat-team-avatar">
+            <AvatarImage src={groupAvatarUrl ?? undefined} alt="" />
+            <AvatarFallback className="workspace-chat-team-avatar-fallback"><Users size={18} /></AvatarFallback>
+          </Avatar>
+        </button>
         <div className="workspace-chat-heading-copy">
           <CardTitle>Conversas da equipe</CardTitle>
           <CardDescription>
@@ -113,7 +149,8 @@ export function ConversationThread({
         {headerAction}
       </CardHeader>
 
-      <CardContent className="workspace-chat-feed" aria-live="polite" aria-relevant="additions">
+      <div className="workspace-chat-feed-wrap">
+      <CardContent ref={feedRef} onScroll={onFeedScroll} className="workspace-chat-feed" aria-live="polite" aria-relevant="additions">
         {error && (
           <div className="workspace-chat-error" role="alert">
             <span>{error}</span>
@@ -126,7 +163,7 @@ export function ConversationThread({
             Carregando mensagens...
           </div>
         ) : messages.length ? (
-          messages.map((message) => {
+          messages.map((message, index) => {
             const mine = message.sender_id === userId
             const senderProfile = mine ? profile : senderProfiles[message.sender_id]
             const sender = mine ? currentUserName(profile) : senderProfile?.full_name?.trim() || "Equipe"
@@ -134,9 +171,11 @@ export function ConversationThread({
             const online = onlineUserIds.includes(message.sender_id)
             const selected = selectedUserId === message.sender_id
 
-            return (
+            const showDay = index === 0 || localDay(messages[index - 1].created_at) !== localDay(message.created_at)
+            return (<Fragment key={message.id}>
+              {showDay && <div className="workspace-chat-date-separator"><span>{dayLabel(message.created_at)}</span></div>}
+              {message.id === unreadMarkerId && <div className="workspace-chat-unread-separator"><span>Mensagens novas</span></div>}
               <div
-                key={message.id}
                 className={`workspace-chat-message ${mine ? "workspace-chat-message-mine" : ""}`}
               >
                 <button className="workspace-chat-message-user-avatar" type="button" onClick={() => setSelectedUserId(selected ? null : message.sender_id)} aria-label={`Ver perfil de ${sender}`} aria-expanded={selected}>
@@ -168,11 +207,13 @@ export function ConversationThread({
                   <Bubble
                     align={mine ? "end" : "start"}
                     variant={mine ? "default" : "muted"}
-                    className="workspace-chat-bubble"
+                    className={`workspace-chat-bubble ${message.image_url && !message.content ? "workspace-chat-bubble-image-only" : ""}`}
                   >
                     <BubbleContent className="workspace-chat-bubble-content">
                       <span className="sr-only">{sender} disse: </span>
-                      {message.image_url && <a className="workspace-chat-image-link" href={message.image_url} target="_blank" rel="noreferrer" aria-label={`Abrir imagem enviada por ${sender}`}><Image src={message.image_url} alt={`Imagem enviada por ${sender}`} width={600} height={450} unoptimized /></a>}
+                      {message.image_url && <button className="workspace-chat-image-link" type="button" onClick={() => setSelectedImageId(message.id)} aria-label={`Abrir imagem enviada por ${sender}`}><Image src={message.image_url} alt={`Imagem enviada por ${sender}`} width={600} height={450} unoptimized /></button>}
+                      {message.message_type === "audio" && message.audio_url && <ChatAudioPlayer id={message.id} src={message.audio_url} duration={message.audio_duration_seconds ?? 0} activeId={activeAudioId} onActivate={setActiveAudioId} />}
+                      {message.message_type === "audio" && !message.audio_url && <span>Áudio indisponível</span>}
                       {message.content && <span>{message.content}</span>}
                     </BubbleContent>
                   </Bubble>
@@ -183,7 +224,7 @@ export function ConversationThread({
                   )}
                 </div>
               </div>
-            )
+            </Fragment>)
           })
         ) : (
           <div className="workspace-chat-empty">
@@ -192,8 +233,11 @@ export function ConversationThread({
           </div>
         )}
       </CardContent>
+      {pendingCount > 0 && <button className="workspace-chat-new-button" type="button" onClick={onScrollToBottom}>Nova mensagem ↓ {pendingCount > 1 ? `(${pendingCount})` : ""}</button>}
+      </div>
 
       <CardFooter className="workspace-chat-composer">{children}</CardFooter>
     </Card>
-  )
+    {selectedImageId && <ChatImageLightbox images={images} selectedId={selectedImageId} onClose={() => setSelectedImageId(null)} />}
+  </>)
 }

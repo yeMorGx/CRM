@@ -17,7 +17,7 @@ type SharedNotification = {
   created_at: string;
   read_at: string | null;
 };
-type InboxMessage = { id: string; content: string; sender_id: string; created_at: string };
+type InboxMessage = { id: string; content: string; sender_id: string; created_at: string; message_type: string; image_path: string | null };
 type InboxItem =
   | ({ kind: "shared" } & SharedNotification)
   | ({ kind: "message"; read_at: null; title: string; body: string; type: "message" } & InboxMessage);
@@ -57,7 +57,7 @@ export function NotificationsMenu({ userId, onOpenChat }: { userId: string | nul
         .order("created_at", { ascending: false })
         .limit(25),
       supabase.from("unread_messages")
-        .select("id,content,sender_id,created_at")
+        .select("id,content,sender_id,created_at,message_type,image_path")
         .order("created_at", { ascending: false })
         .limit(25),
     ]);
@@ -70,7 +70,7 @@ export function NotificationsMenu({ userId, onOpenChat }: { userId: string | nul
         kind: "message" as const,
         type: "message" as const,
         title: "Mensagem da equipe",
-        body: message.content,
+        body: message.message_type === "audio" ? "Áudio" : message.image_path && !message.content ? "Imagem" : message.content,
         read_at: null,
       })),
     ];
@@ -103,6 +103,7 @@ export function NotificationsMenu({ userId, onOpenChat }: { userId: string | nul
         void load();
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "message_reads" }, () => void load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_reads", filter: `user_id=eq.${userId}` }, () => void load())
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "notifications", filter: `recipient_id=eq.${userId}` }, () => void load())
       .subscribe();
     return () => { window.clearTimeout(loadTimer); void supabase.removeChannel(channel); };

@@ -16,6 +16,8 @@ export type LeadSearchResult = {
   source: string;
 };
 
+type PlaceEnrichment = Pick<Lead, "cidade" | "uf" | "foto_ref" | "foto_atribuicao" | "nota_google" | "total_avaliacoes" | "maps_url">;
+
 type SearchStartResponse = { runId?: string; signature?: string; error?: string };
 type SearchPollResponse = { status?: string; results?: LeadSearchResult[]; hiddenExistingCount?: number; error?: string };
 
@@ -101,7 +103,21 @@ export function LeadSearchModule({ onImported, onNotice }: { onImported: (leads:
     }
 
     if (importable.length) {
-      const { data, error } = await supabase.from("leads").insert(importable.map((result) => ({ name: result.name, address: result.address, phone: result.phone || null, website: result.website || null, source: result.source, place_id: result.placeId, status: "novo" }))).select("id,name,email,phone,address,website,source,status,notes,created_at,updated_at");
+      let enriched: Record<string, PlaceEnrichment | null> = {};
+      try {
+        const response = await fetch("/api/places/enrich", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ placeIds: importable.map((result) => result.placeId).filter((id) => /^[A-Za-z0-9_-]{10,250}$/.test(id)) }),
+        });
+        if (response.ok) enriched = ((await response.json()) as { places?: Record<string, PlaceEnrichment | null> }).places ?? {};
+      } catch { /* The Maps metadata is optional; the original import still works. */ }
+      const baseRows = importable.map((result) => ({ name: result.name, address: result.address, phone: result.phone || null, website: result.website || null, source: result.source, place_id: result.placeId, status: "novo" }));
+      const enrichedRows = baseRows.map((row) => ({ ...row, ...enriched[row.place_id] }));
+      let { data, error } = await supabase.from("leads").insert(enrichedRows).select("*");
+      if (error && ["PGRST204", "42703"].includes(error.code)) {
+        ({ data, error } = await supabase.from("leads").insert(baseRows).select("*"));
+      }
       if (error) {
         onNotice("Não foi possível importar os selecionados.");
         setIsImporting(false);

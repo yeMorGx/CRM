@@ -11,5 +11,7 @@ export function createClient() {
     return null;
   }
 
-  return createBrowserClient(supabaseUrl, supabasePublishableKey);
+  return createBrowserClient(supabaseUrl, supabasePublishableKey, {
+    realtime: { worker: true },
+  });
 }

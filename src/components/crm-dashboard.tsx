@@ -43,6 +43,7 @@ import { NotificationsMenu } from "@/components/notifications-menu";
 import { PresenceTracker } from "@/components/presence-tracker";
 import { useAppToast } from "@/components/app-toast-provider";
 import { publishSharedNotification } from "@/lib/notifications";
+import { fetchLeads } from "@/lib/leads-data";
 import { UserManagement } from "@/components/user-management";
 import { MessageLibrary } from "@/components/message-library";
 import { WhatsAppPage } from "@/components/whatsapp-page";
@@ -80,6 +81,9 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<LeadStatus | "all">("all");
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [leadsLoading, setLeadsLoading] = useState(true);
+  const [leadsError, setLeadsError] = useState(false);
+  const [leadSort, setLeadSort] = useState<"score" | "reviews" | "rating" | "recent">("score");
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [notice, setNotice] = useState("");
@@ -93,13 +97,19 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
   useEffect(() => {
     let active = true;
     async function loadLeads() {
-      if (!supabase) return;
-      const { data } = await supabase.from("leads").select("id,name,email,phone,address,website,source,status,notes,created_at,updated_at").order("updated_at", { ascending: false });
-      if (active && data) setLeads(data as Lead[]);
+      if (!supabase) { if (active) setLeadsLoading(false); return; }
+      try {
+        const data = await fetchLeads(supabase);
+        if (active) setLeads(data);
+      } catch {
+        if (active) { setLeadsError(true); toast("Não foi possível carregar os leads.", "error"); }
+      } finally {
+        if (active) setLeadsLoading(false);
+      }
     }
     void loadLeads();
     return () => { active = false; };
-  }, [supabase]);
+  }, [supabase, toast]);
 
   useEffect(() => {
     if (!notice) return;
@@ -110,16 +120,23 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
   const filteredLeads = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase("pt-BR");
     return leads.filter((lead) => {
-      const matchesSearch = !normalizedSearch || [lead.name, lead.email, lead.address, lead.phone, lead.website, lead.notes].filter((value): value is string => Boolean(value)).some((value) => value.toLocaleLowerCase("pt-BR").includes(normalizedSearch));
+      const matchesSearch = !normalizedSearch || [lead.name, lead.email, lead.address, lead.phone, lead.website, lead.notes, lead.cidade, lead.uf, lead.instagram, lead.maps_url, lead.source, statusLabel(lead.status), lead.score, lead.nota_google, lead.total_avaliacoes, lead.created_at, lead.updated_at, lead.favorito ? "favorito" : null].filter((value) => value != null).some((value) => String(value).toLocaleLowerCase("pt-BR").includes(normalizedSearch));
       return matchesSearch && (stageFilter === "all" || lead.status === stageFilter);
     });
   }, [leads, search, stageFilter]);
+
+  const sortedLeads = useMemo(() => [...filteredLeads].sort((a, b) => {
+    const value = (lead: Lead) => leadSort === "score" ? lead.score : leadSort === "reviews" ? lead.total_avaliacoes : leadSort === "rating" ? lead.nota_google : new Date(lead.updated_at ?? lead.created_at ?? 0).getTime();
+    const first = value(a) ?? -1;
+    const second = value(b) ?? -1;
+    return second - first || new Date(b.updated_at ?? b.created_at ?? 0).getTime() - new Date(a.updated_at ?? a.created_at ?? 0).getTime();
+  }), [filteredLeads, leadSort]);
 
   const metrics = useMemo(() => {
     const closed = leads.filter((lead) => lead.status === "fechado").length;
     return {
       total: leads.length,
-      open: leads.length - closed,
+      open: leads.filter((lead) => lead.status !== "fechado" && lead.status !== "descartado").length,
       qualified: leads.filter((lead) => lead.status === "qualificado").length,
       closed,
       conversion: leads.length ? Math.round((closed / leads.length) * 100) : 0,
@@ -136,14 +153,22 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
   async function moveLead(leadId: string, status: LeadStatus) {
     const lead = leads.find((item) => item.id === leadId);
     if (!lead || lead.status === status) return;
-    if (supabase) {
-      const { error } = await supabase.from("leads").update({ status }).eq("id", leadId);
-      if (error) { toast("Não foi possível atualizar esse lead.", "error"); return; }
-    }
+    if (!supabase) { toast("Supabase não configurado.", "error"); return; }
+    const { error } = await supabase.from("leads").update({ status }).eq("id", leadId);
+    if (error) { toast("Não foi possível atualizar esse lead.", "error"); return; }
     setLeads((current) => current.map((item) => item.id === leadId ? { ...item, status } : item));
+    setSelectedLead((current) => current?.id === leadId ? { ...current, status } : current);
     void publishSharedNotification("lead_stage_changed", leadId).then((ok) => {
       if (!ok) toast("Lead atualizado, mas o aviso não chegou à equipe.", "error");
     });
+  }
+
+  async function toggleFavorite(leadId: string, favorito: boolean) {
+    if (!supabase) return;
+    const { error } = await supabase.from("leads").update({ favorito }).eq("id", leadId);
+    if (error) { toast("Não foi possível salvar o favorito. Confira a migração do banco.", "error"); return; }
+    setLeads((current) => current.map((lead) => lead.id === leadId ? { ...lead, favorito } : lead));
+    setSelectedLead((current) => current?.id === leadId ? { ...current, favorito } : current);
   }
 
   async function addLead(formData: FormData) {
@@ -159,7 +184,7 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
     };
     if (!newLead.name) return;
     if (supabase) {
-      const { data, error } = await supabase.from("leads").insert(newLead).select("id,name,email,phone,address,website,source,status,notes,created_at,updated_at").single();
+      const { data, error } = await supabase.from("leads").insert(newLead).select("*").single();
       if (error || !data) { toast("Não foi possível criar o lead. Confira sua conexão.", "error"); return; }
       setLeads((current) => [data as Lead, ...current]);
       void publishSharedNotification("lead_created", data.id).then((ok) => {
@@ -237,12 +262,13 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
               <section className="content-card">
                 <div className="content-card-header">
                   <div><h2>{view === "pipeline" ? "Pipeline de vendas" : "Leads recentes"}</h2><p>{filteredLeads.length} oportunidades encontradas</p></div>
-                  <div className="view-actions">
+                  <div className="view-actions flex-wrap">
                     <div className="segmented-control" role="group" aria-label="Visualização">
                       <button className={view === "pipeline" ? "segment-active" : ""} onClick={() => changeView("pipeline")}><LayoutDashboard size={15} /> Kanban</button>
                       <button className={view !== "pipeline" ? "segment-active" : ""} onClick={() => changeView("leads")}><List size={15} /> Lista</button>
                     </div>
                     <button className="secondary-button filter-button" onClick={() => setStageFilter(stageFilter === "all" ? "novo" : "all")}><Filter size={15} />{stageFilter === "all" ? "Filtrar" : statusLabel(stageFilter)}</button>
+                    {view === "leads" && <label><span className="sr-only">Ordenar leads</span><select value={leadSort} onChange={(event) => setLeadSort(event.target.value as typeof leadSort)} aria-label="Ordenar leads" className="h-9 rounded-lg border border-[var(--crm-line-strong)] bg-[var(--crm-surface-raised)] px-2 text-[10px] text-[var(--crm-text)] outline-none transition-colors duration-150 hover:border-[var(--crm-lime)] focus-visible:border-[var(--crm-lime)]"><option value="score">Ordenar: oportunidade</option><option value="reviews">Ordenar: avaliações</option><option value="rating">Ordenar: nota Google</option><option value="recent">Ordenar: mais recentes</option></select></label>}
                   </div>
                 </div>
                 <div className="toolbar">
@@ -253,7 +279,7 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
                   </div>
                   <span className="toolbar-hint">{view === "pipeline" ? "Arraste os cards para atualizar o estágio" : "Clique em um lead para ver os detalhes"}</span>
                 </div>
-                <PipelineBoard leads={filteredLeads} onMove={moveLead} onSelect={setSelectedLead} onAdd={() => setIsAddOpen(true)} showList={view === "leads"} />
+                <PipelineBoard key={view === "leads" ? `${leadSort}:${stageFilter}:${search}` : "pipeline"} leads={view === "leads" ? sortedLeads : filteredLeads} loading={leadsLoading} error={leadsError} onMove={moveLead} onFavoriteChange={toggleFavorite} onNotice={setNotice} onSelect={setSelectedLead} onAdd={() => setIsAddOpen(true)} showList={view === "leads"} />
               </section>
             </>
           )}
@@ -297,7 +323,7 @@ function DashboardOverview({ firstName, todayLabel, leads, metrics, onAdd, onSel
     <section className="dashboard-kpi-grid" aria-label="Resumo do pipeline">
       <DashboardKpi label="Leads no pipeline" value={metrics.total} detail="registros atuais" icon={Users} tone="lime" />
       <DashboardKpi label="Em aberto" value={metrics.open} detail="aguardando avanço" icon={Target} tone="neutral" />
-      <DashboardKpi label="Qualificados" value={metrics.qualified} detail="prontos para contato" icon={Check} tone="lime" />
+      <DashboardKpi label="Em negociação" value={metrics.qualified} detail="em acompanhamento" icon={Check} tone="lime" />
       <DashboardKpi label="Conversão" value={`${metrics.conversion}%`} detail="leads fechados" icon={BarChart3} tone="red" />
     </section>
 
@@ -309,7 +335,7 @@ function DashboardOverview({ firstName, todayLabel, leads, metrics, onAdd, onSel
       </section>
 
       <aside className="dashboard-side-stack">
-        <section className="dashboard-card dashboard-health-card"><div className="dashboard-card-header compact"><div><p className="dashboard-card-eyebrow">Indicador</p><h2>Saúde do pipeline</h2></div><div className="health-ring" style={{ "--health": `${pipelineHealth}%` } as CSSProperties}><span>{pipelineHealth}</span></div></div><p className="dashboard-health-copy">Percentual de leads qualificados ou fechados.</p><div className="health-progress"><span style={{ width: `${pipelineHealth}%` }} /></div></section>
+        <section className="dashboard-card dashboard-health-card"><div className="dashboard-card-header compact"><div><p className="dashboard-card-eyebrow">Indicador</p><h2>Saúde do pipeline</h2></div><div className="health-ring" style={{ "--health": `${pipelineHealth}%` } as CSSProperties}><span>{pipelineHealth}</span></div></div><p className="dashboard-health-copy">Percentual de leads em negociação ou fechados.</p><div className="health-progress"><span style={{ width: `${pipelineHealth}%` }} /></div></section>
         <section className="dashboard-card dashboard-activity-card"><div className="dashboard-card-header compact"><div><p className="dashboard-card-eyebrow">Atualizações</p><h2>Atividade recente</h2></div><span className="dashboard-subtle-count">{recentLeads.length} itens</span></div>{recentLeads.length ? <div className="dashboard-activity-list">{recentLeads.map((lead) => <button className="dashboard-activity-item" key={lead.id} onClick={() => onSelect(lead)}><span className="dashboard-activity-avatar">{initials(lead.name)}</span><span className="dashboard-activity-copy"><strong>{lead.name}</strong><span>{statusLabel(lead.status)} · {lead.source}</span></span><span className="dashboard-activity-date">{lead.updated_at ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" }).format(new Date(lead.updated_at)) : "agora"}</span></button>)}</div> : <div className="dashboard-activity-empty"><Clock3 size={18} /><span>As atualizações aparecerão aqui quando você cadastrar leads.</span></div>}</section>
       </aside>
     </div>
@@ -334,8 +360,8 @@ function DashboardEmpty({ icon: Icon, title, description, actionLabel, onAction 
   return <div className="dashboard-empty"><span className="dashboard-empty-icon"><Icon size={18} /></span><strong>{title}</strong><p>{description}</p><button className="secondary-button" onClick={onAction}><Plus size={14} /> {actionLabel}</button></div>;
 }
 
-function PipelineBoard({ leads, onMove, onSelect, onAdd, showList }: { leads: Lead[]; onMove: (id: string, status: LeadStatus) => void; onSelect: (lead: Lead) => void; onAdd: () => void; showList: boolean }) {
-  if (showList) return <LeadsTable leads={leads} onSelect={onSelect} statusLabel={statusLabel} />;
+function PipelineBoard({ leads, loading, error, onMove, onFavoriteChange, onNotice, onSelect, onAdd, showList }: { leads: Lead[]; loading: boolean; error: boolean; onMove: (id: string, status: LeadStatus) => Promise<void>; onFavoriteChange: (id: string, favorite: boolean) => Promise<void>; onNotice: (message: string) => void; onSelect: (lead: Lead) => void; onAdd: () => void; showList: boolean }) {
+  if (showList) return <LeadsTable leads={leads} loading={loading} error={error} onSelect={onSelect} onStageChange={onMove} onFavoriteChange={onFavoriteChange} onNotice={onNotice} />;
   return <div className="kanban-grid">{stages.map((stage) => { const stageLeads = leads.filter((lead) => lead.status === stage.slug); return <div className="kanban-column" key={stage.slug} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("leadId"); if (id) onMove(id, stage.slug); }}><div className="kanban-column-header"><div><span className="stage-dot" style={{ backgroundColor: stage.color }} /><h3>{stage.name}</h3><span className="column-count">{stageLeads.length}</span></div><button aria-label={`Opções de ${stage.name}`}><MoreHorizontal size={17} /></button></div><div className="kanban-cards">{stageLeads.map((lead) => <LeadCard key={lead.id} lead={lead} onSelect={onSelect} />)}{stageLeads.length === 0 && <div className="empty-column">Solte um lead aqui</div>}</div><button className="add-card-button" onClick={onAdd}><Plus size={15} /> Adicionar lead</button></div>; })}</div>;
 }
 
@@ -376,6 +402,9 @@ function LeadDrawer({ lead, onClose }: { lead: Lead; onClose: () => void }) {
   const createdLabel = lead.created_at && !Number.isNaN(new Date(lead.created_at).getTime())
     ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(lead.created_at))
     : null;
+  const updatedLabel = lead.updated_at && !Number.isNaN(new Date(lead.updated_at).getTime())
+    ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(lead.updated_at))
+    : null;
 
   return <div className="drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <aside className="lead-drawer lead-details-drawer" role="dialog" aria-modal="true" aria-labelledby="lead-details-title">
@@ -389,8 +418,13 @@ function LeadDrawer({ lead, onClose }: { lead: Lead; onClose: () => void }) {
       <div className="drawer-section">
         <p className="drawer-label">Empresa</p>
         <div className="contact-item"><span>Endereço</span><strong>{lead.address || "Não informado"}</strong></div>
+        <div className="contact-item"><span>Cidade / UF</span><strong>{[lead.cidade, lead.uf].filter(Boolean).join(" - ") || "Não informado"}</strong></div>
+        <div className="contact-item"><span>Instagram</span><strong>{lead.instagram || "Não informado"}</strong></div>
+        <div className="contact-item"><span>Oportunidade</span><strong>{lead.score ?? "—"}</strong></div>
+        <div className="contact-item"><span>Google</span><strong>{lead.nota_google == null ? "—" : `${lead.nota_google.toLocaleString("pt-BR")} · ${lead.total_avaliacoes?.toLocaleString("pt-BR") ?? "—"} avaliações`}</strong></div>
         <div className="contact-item"><span>Origem</span><strong>{lead.source}</strong></div>
         {createdLabel && <div className="contact-item"><span>Cadastrado em</span><strong>{createdLabel}</strong></div>}
+        {updatedLabel && <div className="contact-item"><span>Atualizado em</span><strong>{updatedLabel}</strong></div>}
       </div>
       {lead.notes && <div className="drawer-section"><p className="drawer-label">Observações</p><p className="lead-details-notes">{lead.notes}</p></div>}
     </aside>
