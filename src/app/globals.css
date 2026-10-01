@@ -821,6 +821,20 @@ button:disabled { cursor: wait; opacity: .66; }
 .crm-shell .leads-table .lead-table-empty span { display: block; }
 .crm-shell .leads-table .lead-table-empty strong { color: var(--crm-text); font-size: 12px; }
 .crm-shell .leads-table .lead-table-empty span { margin-top: 6px; color: var(--crm-faint); font-size: 10px; }
+.crm-shell .lead-hover-card { position: fixed; z-index: 70; display: flex; width: min(450px, calc(100vw - 24px)); height: min(398px, calc(100dvh - 24px)); flex-direction: column; gap: 0; overflow: hidden; padding: 0; color: var(--crm-text); background: var(--crm-surface-soft); border: 1px solid var(--crm-line-strong); border-radius: 26px; box-shadow: 0 22px 60px color-mix(in srgb, var(--crm-bg) 80%, transparent); pointer-events: none; }
+.crm-shell .lead-hover-card-media { display: grid; min-height: 0; flex: 1; place-items: center; overflow: hidden; color: var(--crm-lime); background: var(--crm-bg); }
+.crm-shell .lead-hover-card-media-maps { background: var(--crm-surface-raised); }
+.crm-shell .lead-hover-card-media-maps iframe { display: block; width: 100%; height: 100%; border: 0; pointer-events: none; }
+.crm-shell .lead-hover-card-media-site { color: var(--crm-muted); }
+.crm-shell .lead-hover-card-site { display: grid; width: 100%; gap: 13px; place-items: center; padding: 24px; }
+.crm-shell .lead-hover-card-site span { max-width: 100%; overflow: hidden; color: var(--crm-text); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.crm-shell .lead-hover-card-media-whatsapp { background: var(--crm-bg); }
+.crm-shell .lead-hover-card-media-lead { background: var(--crm-lime-soft); }
+.crm-shell .lead-hover-card-initials { display: grid; width: 88px; height: 88px; place-items: center; color: var(--crm-lime); border: 1px solid var(--crm-lime); border-radius: 22px; font-size: 28px; font-weight: 600; }
+.crm-shell .lead-hover-card-caption { display: flex; min-height: 139px; flex: none; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 18px 25px; text-align: center; }
+.crm-shell .lead-hover-card-caption strong { display: block; max-width: 100%; overflow: hidden; color: var(--crm-text); font-family: Georgia, 'Times New Roman', serif; font-size: 36px; font-weight: 500; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
+.crm-shell .lead-hover-card-caption span { display: -webkit-box; max-width: 100%; overflow: hidden; color: var(--crm-muted); font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+@media (max-height: 470px) { .crm-shell .lead-hover-card-caption { min-height: 105px; } }
 
 @media (max-width: 760px) {
   .crm-shell .lead-table-wrap { padding: 0 14px 15px; }
