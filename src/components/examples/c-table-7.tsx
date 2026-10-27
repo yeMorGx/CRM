@@ -103,8 +103,8 @@ export function LeadsTable({ leads, loading = false, error = false, onSelect, on
   const onPreview = (lead: Lead, kind: LeadPreviewKind, target: HTMLElement) => {
     if (window.matchMedia("(hover: none)").matches) return;
     const rect = target.getBoundingClientRect();
-    const width = Math.min(450, window.innerWidth - 24);
-    const height = Math.min(398, window.innerHeight - 24);
+    const width = Math.min(320, window.innerWidth - 24);
+    const height = Math.min(258, window.innerHeight - 24);
     const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
     const top = rect.bottom + 12 + height <= window.innerHeight ? rect.bottom + 12 : Math.max(12, rect.top - height - 12);
     setPreview({ lead, kind, left, top });
