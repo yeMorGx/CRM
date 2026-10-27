@@ -63,8 +63,9 @@ export async function POST(request: Request) {
   }
 
   if (method === "code") {
-    const inviteUrl = new URL("/accept-invite", new URL(request.url).origin).toString();
-    return NextResponse.json({ ok: true, method, email, invite_code: invitation.properties.email_otp, invite_url: inviteUrl, message: "Código de convite criado. Compartilhe-o diretamente com a pessoa." }, { status: 201 });
+    const inviteUrl = new URL("/accept-invite", new URL(request.url).origin);
+    inviteUrl.searchParams.set("email", email);
+    return NextResponse.json({ ok: true, method, email, invite_code: invitation.properties.email_otp, invite_url: inviteUrl.toString(), message: "Código de convite criado. Compartilhe-o diretamente com a pessoa." }, { status: 201 });
   }
 
   const inviteLink = new URL("/auth/confirm?next=%2Fonboarding", new URL(request.url).origin);
