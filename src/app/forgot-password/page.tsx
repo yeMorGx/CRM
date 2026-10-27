@@ -24,15 +24,28 @@ export default function ForgotPasswordPage() {
       return;
     }
     setIsSending(true);
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth/confirm?next=/reset-password`,
-    });
-    setIsSending(false);
-    if (resetError) {
-      setError("Não foi possível solicitar a recuperação agora. Tente novamente em alguns minutos.");
-      return;
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/auth/confirm?next=/reset-password`,
+      });
+      if (resetError) {
+        if (resetError.status === 429) {
+          setError("Muitas tentativas. Aguarde alguns minutos antes de pedir outro link.");
+        } else if (resetError.code === "email_address_not_authorized") {
+          setError("O envio de e-mails de recuperação não está disponível. Avise um administrador.");
+        } else if ((resetError.status ?? 0) >= 500 || resetError.name === "AuthRetryableFetchError") {
+          setError("A autenticação está temporariamente indisponível. Tente novamente em alguns minutos.");
+        } else {
+          setError("Não foi possível solicitar a recuperação agora. Tente novamente em alguns minutos.");
+        }
+        return;
+      }
+      setSent(true);
+    } catch {
+      setError("A autenticação está temporariamente indisponível. Tente novamente em alguns minutos.");
+    } finally {
+      setIsSending(false);
     }
-    setSent(true);
   }
 
   return <AuthShell kicker="Recuperar acesso" title="Redefinir senha" description="Informe o e-mail da sua conta para receber um link seguro de recuperação.">
