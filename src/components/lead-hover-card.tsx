@@ -40,7 +40,10 @@ function SitePreview({ website, domain }: { website: string | null | undefined; 
   const url = siteUrl(website);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   if (!url || failedUrl === url.href) return <div className="lead-hover-card-site"><Globe2 size={38} strokeWidth={1.2} /><span>{domain || "Prévia indisponível"}</span></div>;
-  const screenshot = `https://image.thum.io/get/width/600/crop/430/noanimate/maxAge/168/?url=${encodeURIComponent(url.href)}`;
+  const previewUrl = new URL(url);
+  previewUrl.search = "";
+  previewUrl.hash = "";
+  const screenshot = `https://image.thum.io/get/width/600/crop/430/noanimate/maxAge/168/?url=${encodeURIComponent(previewUrl.href)}`;
   return <img className="lead-hover-card-photo lead-hover-card-site-image" src={screenshot} alt="" width={320} height={180} referrerPolicy="no-referrer" onError={() => setFailedUrl(url.href)} />;
 }
 
