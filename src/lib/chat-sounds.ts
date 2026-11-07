@@ -6,7 +6,9 @@ export function chatSoundForMessage(senderId: string, userId: string | null, isO
   return isOpen ? "chime" : "perk";
 }
 
-const VOLUME = 0.5;
+const DEFAULT_VOLUME = 0.85;
+export function soundVolume(){if(typeof window==='undefined')return DEFAULT_VOLUME;try{const saved=localStorage.getItem('prospecta.sound-volume');const value=saved==null?DEFAULT_VOLUME:Number(saved);return Number.isFinite(value)?Math.max(0,Math.min(1,value)):DEFAULT_VOLUME;}catch{return DEFAULT_VOLUME;}}
+export function setSoundVolume(value:number){try{localStorage.setItem('prospecta.sound-volume',String(Math.max(0,Math.min(1,value))));}catch{/* Sound still uses the default when storage is unavailable. */}}
 const SOUND_FILES: Record<ChatSound, string> = {
   tone: "/sounds/tone.wav",
   chime: "/sounds/chime.wav",
@@ -59,7 +61,7 @@ export async function playSound(sound: ChatSound) {
     if (!buffer || audioContext.state !== "running") return;
     const source = audioContext.createBufferSource();
     const gain = audioContext.createGain();
-    gain.gain.value = VOLUME;
+    gain.gain.value = soundVolume();
     source.buffer = buffer;
     source.connect(gain).connect(audioContext.destination);
     source.start();

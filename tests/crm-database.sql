@@ -1,0 +1,47 @@
+-- Fixtures transacionais: nenhum cadastro, tarefa, proposta ou evento de teste é commitado.
+begin;
+do $$
+declare actor uuid; lid uuid; aid uuid; retry_id uuid:=gen_random_uuid();tid uuid;pid uuid;cid uuid;cid2 uuid;plan_stamp timestamptz;result jsonb;before_count integer;after_count integer;
+begin
+ select id into actor from profiles where is_allowed order by created_at limit 1;
+ select count(*) into before_count from leads;
+ insert into leads(name,phone,address,source) values('FIXTURE TRANSACIONAL — NAO PERSISTIR','','','fixture-rollback') returning id into lid;
+ if exists(select 1 from activities where lead_id=lid and event_type='contact_sent') then raise exception 'Cadastro inventou contato.';end if;
+ aid=crm_record_activity(lid,actor,'contact_sent','FIXTURE abordagem registrada',retry_id);
+ perform crm_record_activity(lid,actor,'contact_sent','FIXTURE retry',retry_id);
+ if (select count(*) from activities where request_id=retry_id)<>1 then raise exception 'Retry duplicou atividade.';end if;
+ if (select status from leads where id=lid)<>'contatado' then raise exception 'Contato não avançou.';end if;
+ perform crm_record_activity(lid,actor,'reply_received','FIXTURE resposta negativa',gen_random_uuid());
+ if (select status from leads where id=lid)<>'respondeu' then raise exception 'Resposta foi qualificada por suposição.';end if;
+ begin update leads set status='perdido' where id=lid;raise exception 'Perda sem motivo permitida.';exception when others then if sqlerrm='Perda sem motivo permitida.' then raise;end if;end;
+ update leads set status='perdido',lost_reason='Concorrente contratado' where id=lid;
+ update leads set status='pesquisa' where id=lid;
+ if not exists(select 1 from activities where lead_id=lid and event_type='lost_recorded') or not exists(select 1 from activities where lead_id=lid and event_type='reopened') then raise exception 'Histórico de reabertura incompleto.';end if;
+ insert into tasks(title,lead_id,created_by,due_at) values('FIXTURE follow-up',lid,actor,now()-interval '1 day') returning id into tid;
+ update tasks set done=true where id=tid;
+ if not exists(select 1 from activities where lead_id=lid and event_type='task_completed') then raise exception 'Conclusão não registrada.';end if;
+ if (select count(*) from activities where lead_id=lid and event_type='reply_received')<>1 then raise exception 'Tarefa inventou resposta.';end if;
+ result=crm_save_lead_plan(lid,'pro','[{"id":"pagina-extra","qty":2}]','{"nome":"FIXTURE"}','{}','{}',null,null,actor,null);
+ if (result->>'total_setup')::numeric<>(select setup_price+500 from plans where id='pro') or (result->>'total_monthly')::numeric<>(select monthly_price from plans where id='pro') then raise exception 'Totais incorretos.';end if;
+ insert into proposals(lead_id,token,status,visible_plan_ids,expires_at,created_by) values(lid,'fixture-token-transacional-nao-publicar','sent',array['pro'],now()+interval '1 day',actor) returning id into pid;
+ if (select sent_at from proposals where id=pid) is null then raise exception 'Data de envio ausente.';end if;
+ result=crm_choose_proposal('fixture-token-transacional-nao-publicar','pro','[]','{"nome":"FIXTURE CLIENTE","email":"fixture@example.test","telefone":"11999999999"}');
+ if (select status from proposals where id=pid)<>'chosen' then raise exception 'Escolha não salva.';end if;
+ if (select source from lead_plan where lead_id=lid)<>'client_link' then raise exception 'Ficha desconectada da proposta.';end if;
+ if has_table_privilege('anon','public.crm_audit','SELECT') or has_table_privilege('anon','public.crm_rate_limits','SELECT') then raise exception 'Tabelas privadas expostas.';end if;
+ if has_function_privilege('anon','public.crm_choose_proposal(text,text,jsonb,jsonb)','EXECUTE') then raise exception 'RPC pública indevida.';end if;
+ if has_table_privilege('authenticated','public.activities','UPDATE') or has_table_privilege('authenticated','public.activities','DELETE') then raise exception 'Histórico não é append-only.';end if;
+ select updated_at into plan_stamp from lead_plan where lead_id=lid;
+ cid=crm_register_contract(gen_random_uuid(),lid,actor,'{"fixture":true}','fixture/unsigned.pdf',plan_stamp);
+ cid2=crm_register_contract(gen_random_uuid(),lid,actor,'{"fixture":true}','fixture/unsigned-v2.pdf',plan_stamp);
+ if (select version from contracts where id=cid2)<>2 or (select superseded_by from contracts where id=cid)<>cid2 then raise exception 'Versões de contrato incorretas.';end if;
+ begin perform crm_choose_proposal('fixture-token-transacional-nao-publicar','pro','[]','{}');raise exception 'Escolha alterada após contrato.';exception when others then if sqlerrm='Escolha alterada após contrato.' then raise;end if;end;
+ perform crm_mark_contract_signed(cid2,'fixture/signed.pdf',actor);
+ if (select status from contracts where id=cid2)<>'signed' or (select status from leads where id=lid)='fechado' then raise exception 'Assinatura ou ganho por suposição incorretos.';end if;
+ for after_count in 1..10 loop perform crm_check_rate('fixture-rate-rollback');end loop;
+ if crm_check_rate('fixture-rate-rollback') then raise exception 'Rate limit ausente.';end if;
+ select count(*) into after_count from leads;
+ if after_count<>before_count+1 then raise exception 'Contagem inesperada.';end if;
+end $$;
+select 'PASS: integridade, retry, contato, resposta negativa, perda, reabertura, tarefa, totais, proposta, RLS/grants' as result;
+rollback;

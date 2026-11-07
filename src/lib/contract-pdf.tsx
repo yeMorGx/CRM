@@ -1,0 +1,17 @@
+import 'server-only';
+import React from 'react';
+import {Document,Page,View,Text,Image as PdfImage,StyleSheet,renderToBuffer} from '@react-pdf/renderer';
+import {contractText,type ContractSnapshot} from './contract-data';
+import {currency} from './crm-insights';
+const styles=StyleSheet.create({page:{padding:51,fontFamily:'Helvetica',fontSize:9,lineHeight:1.5,color:'#17201b'},heading:{fontSize:11,fontFamily:'Helvetica-Bold',marginTop:12,marginBottom:6},title:{fontSize:14,fontFamily:'Helvetica-Bold',marginBottom:16},paragraph:{marginBottom:9,textAlign:'justify'},row:{flexDirection:'row',borderBottom:'1 solid #dce4dc',paddingVertical:5},cell:{flex:1,paddingRight:8},signatures:{flexDirection:'row',gap:14,marginTop:25},signature:{flex:1,textAlign:'center'},signatureImage:{height:50,objectFit:'contain',marginBottom:5},signatureLine:{borderTop:'1 solid #17201b',paddingTop:5,fontSize:8},footer:{position:'absolute',bottom:25,left:51,right:51,fontSize:7,color:'#59655e',textAlign:'right'}});
+const clean=(s:string)=>s.replace(/^#{1,4}\s*/,'').replace(/\*\*/g,'').replace(/\*/g,'');
+export async function contractPdf(snapshot:ContractSnapshot,signatures:string[]){
+ const blocks=contractText(snapshot).split(/\n\s*\n/);
+ const content=blocks.map((block,index)=>{
+  if(block.trim().startsWith('|'))return <View key={index} wrap={false}>{block.split('\n').filter(line=>line.trim()&&!/^\|\s*---/.test(line)).map((line,i)=><View style={styles.row} key={i}>{line.split('|').slice(1,-1).map((cell,c)=><Text style={styles.cell} key={c}>{clean(cell.trim())}</Text>)}</View>)}</View>;
+  return <Text key={index} wrap={false} style={index===0?styles.title:/^\*\*\d+\./.test(block)?styles.heading:styles.paragraph}>{clean(block)}</Text>;
+ });
+ const {lead_plan:p,plan,addons,company}=snapshot;
+ const doc=<Document title={`Contrato ${p.client.nome}`} author={company.legal_name||'Prospecta'}><Page size="A4" style={styles.page}>{content}<View wrap={false} style={styles.signatures}>{company.partners.map((partner,index)=><View style={styles.signature} key={index}><PdfImage src={signatures[index]} style={styles.signatureImage}/><Text style={styles.signatureLine}>{partner.name}</Text><Text>{partner.role} · CONTRATADO</Text></View>)}<View style={styles.signature}><View style={{height:55}}/><Text style={styles.signatureLine}>{p.client.nome}</Text><Text>CONTRATANTE</Text></View></View><Text style={styles.footer} fixed render={({pageNumber,totalPages})=>`${pageNumber} / ${totalPages}`}/></Page><Page size="A4" style={styles.page}><Text style={styles.title}>Resumo do plano contratado</Text>{[['Plano',plan.name],['Páginas',p.project.paginas],['Backups',plan.limits.backup],['Monitoramento',plan.limits.monitoramento],['Alterações de conteúdo/mês',plan.limits.alteracoes_mes],['Horas de desenvolvimento/mês',plan.limits.horas_dev_mes],['Resposta do suporte',plan.limits.suporte_h],['Relatório',plan.limits.relatorio],['Extras',addons.map(a=>`${a.name} (${a.qty})`).join(', ')||'Nenhum'],['Implantação',currency(p.total_setup)],['Mensalidade',currency(p.total_monthly)],['Permanência',plan.limits.permanencia_meses],['Forma de pagamento',p.terms.forma_pagamento]].map(([label,value])=><View key={label} style={styles.row}><Text style={styles.cell}>{label}</Text><Text style={styles.cell}>{value||'________'}</Text></View>)}<Text style={styles.footer} fixed render={({pageNumber,totalPages})=>`${pageNumber} / ${totalPages}`}/></Page></Document>;
+ return renderToBuffer(doc);
+}

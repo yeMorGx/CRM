@@ -1,0 +1,12 @@
+"use client";
+import {ActorByline} from './people-provider';
+import {useEffect,useState} from 'react';
+import {useCrmWorkspace} from './use-crm-workspace';
+import {CrmState} from './commercial-dashboard';
+import {activityLabels,dateLabel} from '@/lib/crm-insights';
+import type {Lead} from '@/lib/crm-types';
+export function CrmAudit({onSelect}:{onSelect:(lead:Lead)=>void}){
+ const {data,error,loading,refresh}=useCrmWorkspace();const [audit,setAudit]=useState<{id:string;entity:string;action:string;created_at:string;actor_id:string|null}[]>([]),[auditError,setAuditError]=useState('');
+ useEffect(()=>{void fetch('/api/crm/audit').then(async r=>{const result=await r.json();if(!r.ok)throw new Error(result.error);setAudit(result.data);}).catch(e=>setAuditError(e.message));},[]);
+ return <div className="crm-commercial"><header className="crm-page-heading"><div><p>Gestão</p><h1>Auditoria comercial</h1><span>Eventos de negócio e alterações administrativas preservados no histórico.</span></div></header>{loading||error||!data?<CrmState loading={loading} error={error} retry={()=>void refresh()}/>:<div className="crm-insights-grid"><section className="crm-panel"><h2>Eventos dos leads</h2><div className="crm-timeline">{[...data.activities].sort((a,b)=>b.created_at.localeCompare(a.created_at)).map(a=><button key={a.id} onClick={()=>{const lead=data.leads.find(l=>l.id===a.lead_id);if(lead)onSelect(lead);}}><strong>{activityLabels[a.event_type||'']||a.type}</strong><span>{data.leads.find(l=>l.id===a.lead_id)?.name}</span><ActorByline id={a.user_id}/><small>{dateLabel(a.occurred_at||a.created_at)}</small></button>)}{!data.activities.length&&<p className="crm-empty-copy">Nenhuma atividade registrada ainda.</p>}</div></section><section className="crm-panel"><h2>Configurações e fichas comerciais</h2>{auditError&&<p className="crm-error" role="alert">{auditError}</p>}<div className="crm-timeline">{[...audit].sort((a,b)=>b.created_at.localeCompare(a.created_at)).map(a=><article key={a.id}><strong>{{plans:"Plano",plan_addons:"Extra",company_settings:"Empresa",lead_plan:"Ficha de plano",leads:"Lead"}[a.entity]||a.entity} · {{update:"Atualizado",insert:"Criado",delete:"Apagado",manual:"Alterado pela equipe",proposal:"Escolhido na proposta"}[a.action]||a.action}</strong><ActorByline id={a.actor_id}/><small>{dateLabel(a.created_at)}</small></article>)}{!audit.length&&!auditError&&<p className="crm-empty-copy">As próximas edições de planos e empresa serão registradas aqui.</p>}</div></section></div>}</div>;
+}

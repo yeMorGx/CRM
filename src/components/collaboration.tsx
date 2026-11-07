@@ -11,6 +11,8 @@ import { useAppToast } from "@/components/app-toast-provider";
 import { publishSharedNotification } from "@/lib/notifications";
 import { chatSoundForMessage, playSound, preloadChatSounds, resumeChatSounds } from "@/lib/chat-sounds";
 
+async function sendChat(values:Record<string,unknown>){try{const response=await fetch('/api/chat/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:crypto.randomUUID(),...values})});const result=await response.json();return response.ok?{data:result.data,error:null}:{data:null,error:result.error};}catch{return {data:null,error:'Falha na conexão.'};}}
+
 type Task = { id: string; title: string; done: boolean; lead_id?: string | null; created_at?: string };
 
 export function CollaborationModule() {
@@ -428,7 +430,7 @@ function MessagesModule({ supabase, profile, onlineUserIds, incomingMessage, onS
     const path = `${userId}/${crypto.randomUUID()}.${extension}`;
     const { error: uploadError } = await supabase.storage.from("chat-audio").upload(path, blob, { contentType, upsert: false });
     if (uploadError) { setRecordError("Não foi possível enviar o áudio. Tente novamente."); setIsSending(false); return; }
-    const { data, error: sendError } = await supabase.from("messages").insert({ sender_id: userId, content: "", message_type: "audio", audio_path: path, audio_duration_seconds: Math.min(300, Math.max(1, Math.ceil(duration))) }).select("id,content,image_path,message_type,audio_path,audio_duration_seconds,sender_id,created_at").single();
+    const { data, error: sendError } = await sendChat({content:"",message_type:"audio",audio_path:path,audio_duration_seconds:Math.min(300,Math.max(1,Math.ceil(duration)))});
     if (sendError || !data) {
       await supabase.storage.from("chat-audio").remove([path]);
       setRecordError("Não foi possível salvar o áudio. Tente novamente."); setIsSending(false); return;
@@ -580,10 +582,7 @@ function MessagesModule({ supabase, profile, onlineUserIds, incomingMessage, onS
       }
     }
 
-    const { data, error: sendError } = await supabase.from("messages")
-      .insert({ content: content.trim(), image_path: uploadedPath, sender_id: userId })
-      .select("id,content,image_path,message_type,audio_path,audio_duration_seconds,sender_id,created_at")
-      .single();
+    const { data, error: sendError } = await sendChat({content:content.trim(),image_path:uploadedPath});
     if (sendError || !data) {
       if (uploadedPath) await supabase.storage.from("chat-attachments").remove([uploadedPath]);
       setError("Não foi possível enviar. Confira sua conexão e tente novamente.");

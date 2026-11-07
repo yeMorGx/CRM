@@ -1,10 +1,13 @@
 "use client";
 
+import {AppSelect} from "@/components/app-select";
+
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Copy, ExternalLink, Star } from "lucide-react";
+import { Copy, ExternalLink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import {LeadContextMenu,LeadActionsButton} from "@/components/lead-actions";
 import { Badge } from "@/components/reui/badge";
 import { LeadHoverCard, type LeadPreview, type LeadPreviewKind } from "@/components/lead-hover-card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -38,7 +41,7 @@ function webUrl(value: string | null | undefined) {
 function LeadAvatar({ lead }: { lead: Lead }) {
   const [failed, setFailed] = useState(false);
   const initials = lead.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("pt-BR");
-  return <span className="inline-grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-[var(--crm-lime-soft)] text-[11px] font-semibold text-[var(--crm-lime)]">
+  return <span className="inline-grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-[var(--crm-accent-soft)] text-[11px] font-semibold text-[var(--crm-accent)]">
     {lead.foto_ref && !failed ? <img src={`/api/lead-photo?ref=${encodeURIComponent(lead.foto_ref)}`} alt="" loading="lazy" width={40} height={40} className="size-10 object-cover" onError={() => setFailed(true)} /> : initials || "—"}
   </span>;
 }
@@ -46,7 +49,7 @@ function LeadAvatar({ lead }: { lead: Lead }) {
 function OpportunityBadge({ score }: { score: number | null | undefined }) {
   if (score == null) return <span className="text-[var(--crm-faint)]">—</span>;
   const level = score >= 80 ? "Alta" : score >= 50 ? "Média" : "Baixa";
-  const color = score >= 80 ? "text-[var(--crm-lime)]" : score >= 50 ? "text-[var(--warning)]" : "text-[var(--crm-muted)]";
+  const color = score >= 80 ? "text-[var(--crm-accent)]" : score >= 50 ? "text-[var(--warning)]" : "text-[var(--crm-muted)]";
   return <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[var(--crm-text)]"><span className={`size-1.5 rounded-full bg-current ${color}`} /><strong>{level} · {score}</strong></span>;
 }
 
@@ -56,10 +59,10 @@ function QuickContacts({ lead, onNotice, onPreview, onPreviewEnd }: { lead: Lead
   const site = webUrl(lead.website);
   const instagram = webUrl(lead.instagram?.startsWith("@") ? `https://www.instagram.com/${lead.instagram.slice(1)}` : lead.instagram);
   const maps = webUrl(lead.maps_url) ?? (lead.place_id || lead.address ? new URL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([lead.name, lead.address].filter(Boolean).join(" "))}${lead.place_id ? `&query_place_id=${encodeURIComponent(lead.place_id)}` : ""}`) : null);
-  const pill = "inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-[var(--crm-line-strong)] px-2.5 text-[10px] font-medium text-[var(--crm-muted)] transition-colors duration-150 hover:border-[var(--crm-lime)] hover:text-[var(--crm-lime)] focus-visible:outline-2 focus-visible:outline-[var(--crm-lime)]";
+  const pill = "inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-[var(--crm-line-strong)] px-2.5 text-[10px] font-medium text-[var(--crm-muted)] transition-colors duration-150 hover:border-[var(--crm-accent)] hover:text-[var(--crm-accent)] focus-visible:outline-2 focus-visible:outline-[var(--crm-accent)]";
   return <div className="flex items-center gap-1.5 whitespace-nowrap" onClick={(event) => event.stopPropagation()}>
     {phone && <button type="button" className={pill} onClick={async () => { try { await navigator.clipboard.writeText(phone); onNotice("Telefone copiado."); } catch { onNotice("Não foi possível copiar o telefone."); } }}><Copy size={11} />Copiar</button>}
-    {whatsapp && <a className={`${pill} text-[var(--crm-lime)]`} href={`https://wa.me/${whatsapp.slice(1)}`} target="_blank" rel="noopener noreferrer" onMouseEnter={(event) => onPreview(lead, "whatsapp", event.currentTarget)} onMouseLeave={onPreviewEnd} onFocus={(event) => onPreview(lead, "whatsapp", event.currentTarget)} onBlur={onPreviewEnd}>WhatsApp</a>}
+    {whatsapp && <a className={`${pill} text-[var(--crm-accent)]`} href={`https://wa.me/${whatsapp.slice(1)}`} target="_blank" rel="noopener noreferrer" onMouseEnter={(event) => onPreview(lead, "whatsapp", event.currentTarget)} onMouseLeave={onPreviewEnd} onFocus={(event) => onPreview(lead, "whatsapp", event.currentTarget)} onBlur={onPreviewEnd}>WhatsApp</a>}
     {site && <a className={pill} href={site.href} target="_blank" rel="noopener noreferrer" onMouseEnter={(event) => onPreview(lead, "site", event.currentTarget)} onMouseLeave={onPreviewEnd} onFocus={(event) => onPreview(lead, "site", event.currentTarget)} onBlur={onPreviewEnd}>Site</a>}
     {instagram && instagram.hostname.endsWith("instagram.com") && <a className={pill} href={instagram.href} target="_blank" rel="noopener noreferrer">Instagram</a>}
     {maps && <a className={pill} href={maps.href} target="_blank" rel="noopener noreferrer" onMouseEnter={(event) => onPreview(lead, "maps", event.currentTarget)} onMouseLeave={onPreviewEnd} onFocus={(event) => onPreview(lead, "maps", event.currentTarget)} onBlur={onPreviewEnd}>Maps</a>}
@@ -68,24 +71,24 @@ function QuickContacts({ lead, onNotice, onPreview, onPreviewEnd }: { lead: Lead
 
 function StageSelect({ lead, onStageChange }: { lead: Lead; onStageChange: LeadsTableProps["onStageChange"] }) {
   const [busy, setBusy] = useState(false);
-  return <select aria-label={`Estágio de ${lead.name}`} value={lead.status} disabled={busy} onClick={(event) => event.stopPropagation()} onChange={async (event) => { setBusy(true); try { await onStageChange(lead.id, event.target.value as LeadStatus); } finally { setBusy(false); } }} className="h-8 max-w-36 rounded-lg border border-[var(--crm-line-strong)] bg-[var(--crm-surface-soft)] px-2 text-[10px] text-[var(--crm-text)] outline-none transition-colors duration-150 hover:border-[var(--crm-lime)] focus-visible:border-[var(--crm-lime)]">
+  return <AppSelect aria-label={`Estágio de ${lead.name}`} value={lead.status} disabled={busy} onClick={(event) => event.stopPropagation()} onChange={async (event) => { setBusy(true); try { await onStageChange(lead.id, event.target.value as LeadStatus); } finally { setBusy(false); } }} className="h-8 max-w-36 rounded-lg border border-[var(--crm-line-strong)] bg-[var(--crm-surface-soft)] px-2 text-[10px] text-[var(--crm-text)] outline-none transition-colors duration-150 hover:border-[var(--crm-accent)] focus-visible:border-[var(--crm-accent)]">
     {stages.map((stage) => <option key={stage.slug} value={stage.slug}>{stage.name}</option>)}
-  </select>;
+  </AppSelect>;
 }
 
 function LeadRow({ lead, onSelect, onStageChange, onFavoriteChange, onNotice, onPreview, onPreviewEnd }: LeadsTableProps & PreviewHandlers & { lead: Lead }) {
   const site = webUrl(lead.website);
   const location = [lead.cidade, lead.uf].filter(Boolean).join(" - ");
-  return <TableRow className="lead-table-row" tabIndex={0} aria-label={`Abrir detalhes de ${lead.name}`} onClick={() => onSelect(lead)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelect(lead); } }}>
-    <TableCell><button type="button" aria-label={lead.favorito ? `Remover ${lead.name} dos favoritos` : `Favoritar ${lead.name}`} aria-pressed={Boolean(lead.favorito)} onClick={(event) => { event.stopPropagation(); void onFavoriteChange(lead.id, !lead.favorito); }} className="text-[var(--crm-faint)] transition-colors duration-150 hover:text-[var(--crm-lime)] focus-visible:outline-2 focus-visible:outline-[var(--crm-lime)]"><Star size={16} fill={lead.favorito ? "currentColor" : "none"} className={lead.favorito ? "text-[var(--crm-lime)]" : ""} /></button></TableCell>
+  return <LeadContextMenu lead={lead} trigger={<TableRow className="lead-table-row" tabIndex={0} aria-label={`Abrir detalhes de ${lead.name}`} onClick={() => onSelect(lead)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelect(lead); } }}>
+    <TableCell><button type="button" aria-label={lead.favorito ? `Remover ${lead.name} dos favoritos` : `Favoritar ${lead.name}`} aria-pressed={Boolean(lead.favorito)} onClick={(event) => { event.stopPropagation(); void onFavoriteChange(lead.id, !lead.favorito); }} className="text-[var(--crm-faint)] transition-colors duration-150 hover:text-[var(--crm-accent)] focus-visible:outline-2 focus-visible:outline-[var(--crm-accent)]"><span aria-hidden="true" className={`text-[17px] leading-none ${lead.favorito ? "text-[var(--crm-accent)]" : ""}`}>{lead.favorito ? "★" : "☆"}</span></button></TableCell>
     <TableCell onMouseEnter={(event) => onPreview(lead, "lead", event.currentTarget)} onMouseLeave={onPreviewEnd} onFocus={(event) => onPreview(lead, "lead", event.currentTarget)} onBlur={onPreviewEnd}><div className="flex min-w-0 items-center gap-2.5"><LeadAvatar lead={lead} /><div className="min-w-0"><strong className="block truncate text-[11px] font-semibold text-[var(--crm-text)]" title={lead.name}>{lead.name}</strong><span className="block truncate text-[10px] text-[var(--crm-muted)]">{location || "—"}</span>{lead.foto_ref && lead.foto_atribuicao?.length ? <span className="block truncate text-[8px] text-[var(--crm-faint)]">Foto: {lead.foto_atribuicao.map((author, index) => { const url = webUrl(author.uri); return <span key={index}>{index > 0 ? ", " : ""}{url ? <a href={url.href} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} className="hover:underline">{author.displayName}</a> : author.displayName}</span>; })}</span> : null}</div></div></TableCell>
     <TableCell><OpportunityBadge score={lead.score} /></TableCell>
     <TableCell>{lead.nota_google == null ? "—" : <span className="whitespace-nowrap"><strong className="text-[var(--crm-text)]">★ {lead.nota_google.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</strong><span className="ml-1.5 text-[var(--crm-muted)]">{lead.total_avaliacoes == null ? "—" : `${lead.total_avaliacoes.toLocaleString("pt-BR")} aval.`}</span></span>}</TableCell>
-    <TableCell>{site ? <a href={site.href} target="_blank" rel="noopener noreferrer" title={site.href} onClick={(event) => event.stopPropagation()} onMouseEnter={(event) => onPreview(lead, "site", event.currentTarget)} onMouseLeave={onPreviewEnd} onFocus={(event) => onPreview(lead, "site", event.currentTarget)} onBlur={onPreviewEnd} className="block max-w-28 truncate text-[var(--crm-lime)] hover:underline">{site.hostname.replace(/^www\./, "")}</a> : <Badge variant="warning-light" radius="full" size="sm" className="border-[var(--warning)]/20 bg-[var(--warning)]/10 text-[var(--warning)]">Sem site próprio</Badge>}</TableCell>
+    <TableCell>{site ? <a href={site.href} target="_blank" rel="noopener noreferrer" title={site.href} onClick={(event) => event.stopPropagation()} onMouseEnter={(event) => onPreview(lead, "site", event.currentTarget)} onMouseLeave={onPreviewEnd} onFocus={(event) => onPreview(lead, "site", event.currentTarget)} onBlur={onPreviewEnd} className="block max-w-28 truncate text-[var(--crm-accent)] hover:underline">{site.hostname.replace(/^www\./, "")}</a> : <Badge variant="warning-light" radius="full" size="sm" className="border-[var(--warning)]/20 bg-[var(--warning)]/10 text-[var(--warning)]">Sem site próprio</Badge>}</TableCell>
     <TableCell><QuickContacts lead={lead} onNotice={onNotice} onPreview={onPreview} onPreviewEnd={onPreviewEnd} /></TableCell>
     <TableCell><StageSelect lead={lead} onStageChange={onStageChange} /></TableCell>
-    <TableCell><button type="button" onClick={(event) => { event.stopPropagation(); onSelect(lead); }} className="inline-flex h-7 items-center gap-1 rounded-full border border-[var(--crm-line-strong)] px-2.5 text-[10px] font-medium text-[var(--crm-text)] transition-colors duration-150 hover:border-[var(--crm-lime)] hover:text-[var(--crm-lime)] focus-visible:outline-2 focus-visible:outline-[var(--crm-lime)]">Detalhes <ExternalLink size={10} /></button></TableCell>
-  </TableRow>;
+    <TableCell><div className="flex items-center gap-1"><LeadActionsButton lead={lead}/><button type="button" onClick={(event) => { event.stopPropagation(); onSelect(lead); }} className="inline-flex h-7 items-center gap-1 rounded-full border border-[var(--crm-line-strong)] px-2.5 text-[10px] font-medium text-[var(--crm-text)] transition-colors duration-150 hover:border-[var(--crm-accent)] hover:text-[var(--crm-accent)] focus-visible:outline-2 focus-visible:outline-[var(--crm-accent)]">Detalhes <ExternalLink size={10} /></button></div></TableCell>
+  </TableRow>}/>;
 }
 
 export function LeadsTable({ leads, loading = false, error = false, onSelect, onStageChange, onFavoriteChange, onNotice }: LeadsTableProps) {

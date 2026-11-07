@@ -1,5 +1,6 @@
 "use client";
 
+import {AppDialog} from "./app-dialog";
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, LayoutGrid, List, Plus, Trash2, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -106,6 +107,17 @@ export function EventCalendarModule() {
   function openDay(day: Date) { setDraft(newDraft(day)); setFormError(""); }
   function openEvent(event: CalendarEvent) { setDraft(draftFromEvent(event)); setFormError(""); }
 
+  async function mutateEvent(payload: Record<string, unknown>) {
+    const response = await fetch("/api/calendar/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo" }),
+    });
+    const result = await response.json() as { error?: string; event?: CalendarEvent; syncErrors?: string[] };
+    if (!response.ok) throw new Error(result.error || "Não foi possível atualizar a Agenda.");
+    return result;
+  }
+
   async function saveEvent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft || !supabase) return;
@@ -116,10 +128,17 @@ export function EventCalendarModule() {
     if (end <= start) { setFormError("O horário de término deve ser depois do início."); return; }
     setSaving(true); setFormError("");
     const values = { title: draft.title.trim(), start_at: start.toISOString(), end_at: end.toISOString(), all_day: draft.allDay, color: draft.color, notes: draft.notes.trim() || null };
-    const result = draft.id ? await supabase.from("calendar_events").update(values).eq("id", draft.id).select(eventColumns).single() : await supabase.from("calendar_events").insert(values).select(eventColumns).single();
+    let result: Awaited<ReturnType<typeof mutateEvent>>;
+    try { result = await mutateEvent({ action: "save", ...(draft.id ? { id: draft.id } : {}), values }); }
+    catch (saveError) {
+      setSaving(false);
+      const message = saveError instanceof Error ? saveError.message : "Não foi possível salvar. Confira sua conexão e tente novamente.";
+      setFormError(message); toast(message, "error"); return;
+    }
     setSaving(false);
-    if (result.error || !result.data) { setFormError("Não foi possível salvar. Confira sua conexão e tente novamente."); toast("Não foi possível salvar o compromisso.", "error"); return; }
-    void publishSharedNotification("event_scheduled", result.data.id).then((ok) => {
+    if (!result.event) { setFormError("Não foi possível salvar o compromisso."); toast("Não foi possível salvar o compromisso.", "error"); return; }
+    if (result.syncErrors?.length) toast(`Compromisso salvo na Agenda, mas ${result.syncErrors.length} calendário(s) não sincronizaram.`, "error");
+    void publishSharedNotification("event_scheduled", result.event.id).then((ok) => {
       if (!ok) toast("Compromisso salvo, mas o aviso não chegou à equipe.", "error");
     });
     setDraft(null); setAnchor(date); refresh();
@@ -128,9 +147,13 @@ export function EventCalendarModule() {
   async function deleteEvent() {
     if (!draft?.id || !supabase || !window.confirm("Excluir este evento da agenda?")) return;
     setSaving(true); setFormError("");
-    const { error: deleteError } = await supabase.from("calendar_events").delete().eq("id", draft.id);
+    let result: Awaited<ReturnType<typeof mutateEvent>>;
+    try { result = await mutateEvent({ action: "delete", id: draft.id }); }
+    catch (deleteError) {
+      setSaving(false); setFormError(deleteError instanceof Error ? deleteError.message : "Não foi possível excluir o evento."); toast("Não foi possível excluir o compromisso.", "error"); return;
+    }
     setSaving(false);
-    if (deleteError) { setFormError("Não foi possível excluir o evento."); toast("Não foi possível excluir o compromisso.", "error"); return; }
+    if (result.syncErrors?.length) toast("Evento removido da Agenda; uma integração ainda precisa de atenção.", "error");
     setDraft(null); refresh();
   }
 
@@ -141,13 +164,15 @@ export function EventCalendarModule() {
     const duration = new Date(item.end_at).getTime() - oldStart.getTime();
     const nextStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), oldStart.getHours(), oldStart.getMinutes());
     const nextEnd = new Date(nextStart.getTime() + duration);
-    const { error: updateError } = await supabase.from("calendar_events").update({ start_at: nextStart.toISOString(), end_at: nextEnd.toISOString() }).eq("id", eventId);
-    if (updateError) { setError("Não foi possível mover o evento."); toast("Não foi possível mover o compromisso.", "error"); }
-    else {
+    try {
+      const result = await mutateEvent({ action: "move", id: eventId, start_at: nextStart.toISOString(), end_at: nextEnd.toISOString() });
+      if (result.syncErrors?.length) toast("Compromisso movido na Agenda, mas nem todos os calendários sincronizaram.", "error");
       void publishSharedNotification("event_scheduled", eventId).then((ok) => {
         if (!ok) toast("Compromisso movido, mas o aviso não chegou à equipe.", "error");
       });
       refresh();
+    } catch {
+      setError("Não foi possível mover o evento."); toast("Não foi possível mover o compromisso.", "error");
     }
   }
 
@@ -165,7 +190,7 @@ export function EventCalendarModule() {
       </section>
       <aside className="event-calendar-aside"><div className="calendar-aside-header"><div><CalendarDays size={18} /><h2>Eventos neste período</h2></div><span>{upcoming.length}</span></div>{upcoming.length ? <div className="calendar-upcoming-list">{upcoming.map((event) => <button className="calendar-upcoming-item" key={event.id} onClick={() => openEvent(event)}><span className={`calendar-upcoming-mark color-${event.color}`} /><span><strong>{event.title}</strong><small>{formatShortDate(new Date(event.start_at))} · {timeLabel(event)}</small></span><ChevronRight size={15} /></button>)}</div> : <div className="calendar-aside-empty"><Clock3 size={21} /><strong>Nada agendado</strong><span>Os compromissos deste período aparecerão aqui.</span></div>}<div className="calendar-aside-note"><Check size={14} /> Visível apenas para usuários autorizados.</div></aside>
     </div>
-    {draft && <div className="calendar-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDraft(null); }}><form className="calendar-modal" onSubmit={saveEvent} role="dialog" aria-modal="true" aria-labelledby="calendar-modal-title"><div className="calendar-modal-header"><div><h2 id="calendar-modal-title">{draft.id ? "Editar evento" : "Novo evento"}</h2><p>Defina quando esta conversa vai acontecer.</p></div><button type="button" aria-label="Fechar" onClick={() => setDraft(null)}><X size={18} /></button></div><label>Nome do evento<input autoFocus required maxLength={160} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Ex.: Reunião com cliente" /></label><div className="calendar-modal-fields"><label>Data<input type="date" required value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label><label className="calendar-all-day"><input type="checkbox" checked={draft.allDay} onChange={(event) => setDraft({ ...draft, allDay: event.target.checked })} /> Dia inteiro</label></div>{!draft.allDay && <div className="calendar-modal-fields"><label>Início<input type="time" required value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label><label>Término<input type="time" required value={draft.endTime} onChange={(event) => setDraft({ ...draft, endTime: event.target.value })} /></label></div>}<ProspectaSelect label="Cor" value={draft.color} options={[{ value: "lime", label: "Verde", tone: "lime" }, { value: "blue", label: "Azul", tone: "blue" }, { value: "amber", label: "Âmbar", tone: "amber" }, { value: "red", label: "Vermelho", tone: "red" }]} onChange={(color) => setDraft({ ...draft, color: color as EventColor })} /><label>Notas <span>(opcional)</span><textarea rows={3} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Detalhes para a equipe" /></label>{formError && <p className="calendar-form-error" role="alert">{formError}</p>}<div className="calendar-modal-actions">{draft.id && <button type="button" className="calendar-delete" onClick={deleteEvent} disabled={saving}><Trash2 size={15} /> Excluir</button>}<button type="button" className="secondary-button" onClick={() => setDraft(null)}>Cancelar</button><button type="submit" className="primary-button" disabled={saving}>{saving ? "Salvando..." : "Salvar evento"}</button></div></form></div>}
+    {draft && <AppDialog label={draft.id?"Editar evento":"Novo evento"} onClose={()=>setDraft(null)} busy={saving} className="app-calendar-dialog"><form className="calendar-modal" onSubmit={saveEvent} aria-labelledby="calendar-modal-title"><div className="calendar-modal-header"><div><h2 id="calendar-modal-title">{draft.id ? "Editar evento" : "Novo evento"}</h2><p>Defina quando esta conversa vai acontecer.</p></div><button type="button" aria-label="Fechar" onClick={() => setDraft(null)}><X size={18} /></button></div><label>Nome do evento<input autoFocus required maxLength={160} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Ex.: Reunião com cliente" /></label><div className="calendar-modal-fields"><label>Data<input type="date" required value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label><label className="calendar-all-day"><input type="checkbox" checked={draft.allDay} onChange={(event) => setDraft({ ...draft, allDay: event.target.checked })} /> Dia inteiro</label></div>{!draft.allDay && <div className="calendar-modal-fields"><label>Início<input type="time" required value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label><label>Término<input type="time" required value={draft.endTime} onChange={(event) => setDraft({ ...draft, endTime: event.target.value })} /></label></div>}<details className="app-event-options"><summary>Cor e notas</summary><ProspectaSelect label="Cor" value={draft.color} options={[{ value: "lime", label: "Verde", tone: "lime" }, { value: "blue", label: "Azul", tone: "blue" }, { value: "amber", label: "Âmbar", tone: "amber" }, { value: "red", label: "Vermelho", tone: "red" }]} onChange={(color) => setDraft({ ...draft, color: color as EventColor })} /><label>Notas <span>(opcional)</span><textarea rows={3} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Detalhes para a equipe" /></label></details>{formError && <p className="calendar-form-error" role="alert">{formError}</p>}<div className="calendar-modal-actions">{draft.id && <button type="button" className="calendar-delete" onClick={deleteEvent} disabled={saving}><Trash2 size={15} /> Excluir</button>}<button type="button" className="secondary-button" onClick={() => setDraft(null)}>Cancelar</button><button type="submit" className="primary-button" disabled={saving}>{saving ? "Salvando..." : "Salvar evento"}</button></div></form></AppDialog>}
   </div>;
 }
 

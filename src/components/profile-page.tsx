@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Camera, Check, LoaderCircle, LogOut, Mail, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
+import { Camera, LoaderCircle, LogOut, Mail, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
@@ -290,16 +290,16 @@ export function ProfilePage({ profile, email, onSaved, onSignOut }: {
             <label className="profile-field"><span>Nome completo</span><input name="full_name" autoComplete="name" value={name} onChange={(event) => { setName(event.target.value); setMessage(""); }} maxLength={80} required placeholder="Seu nome" /></label>
             <label className="profile-field"><span>E-mail de acesso</span><div className="profile-readonly-field"><Mail size={17} /><input type="email" value={email ?? ""} readOnly aria-describedby="profile-email-hint" /></div><small id="profile-email-hint">Para alterar o e-mail de acesso, entre em contato com o administrador.</small></label>
           </div>
-          <fieldset className="profile-avatar-field"><legend>Cor do avatar</legend><p>Escolha como você aparece no CRM.</p><div className="profile-color-options">{colorOptions.map((color, index) => <button key={color} type="button" className={`profile-color-option ${avatarColor === color ? "profile-color-selected" : ""}`} style={{ backgroundColor: color }} title={`Cor ${index + 1}`} aria-label={`Cor do avatar ${index + 1}`} aria-pressed={avatarColor === color} onClick={() => { setAvatarColor(color); setMessage(""); }}>{avatarColor === color && <Check size={17} strokeWidth={2.5} />}</button>)}</div></fieldset>
+          <fieldset className="profile-avatar-field"><legend>Cor do avatar</legend><p>Essa cor também define os destaques do CRM.</p><div className="profile-color-options">{colorOptions.map((color, index) => <button key={color} type="button" className={`profile-color-option ${avatarColor === color ? "profile-color-selected" : ""}`} style={{ backgroundColor: color }} title={`Cor ${index + 1}`} aria-label={`Cor do avatar ${index + 1}`} aria-pressed={avatarColor === color} onClick={() => { setAvatarColor(color); setMessage(""); }}>{avatarColor === color && <span className="profile-color-check" aria-hidden="true">✓</span>}</button>)}</div></fieldset>
           {error && <p className="profile-feedback profile-feedback-error" role="alert">{error}</p>}
-          {message && <p className="profile-feedback profile-feedback-success" role="status"><Check size={15} />{message}</p>}
-          <div className="profile-form-footer"><span>Alterações visíveis após salvar.</span><button className="primary-button" type="submit" disabled={saving || !hasChanges}>{saving ? "Salvando..." : "Salvar alterações"}<ArrowRight size={16} /></button></div>
+          {message && <p className="profile-feedback profile-feedback-success" role="status">{message}</p>}
+          <div className="profile-form-footer"><span>Alterações visíveis após salvar.</span><button className="primary-button" type="submit" disabled={saving || !hasChanges}>{saving ? "Salvando..." : "Salvar alterações"}</button></div>
         </form>
       </div>
 
       <aside className="profile-side" aria-label="Detalhes da conta">
         <section className="profile-side-section"><div className="profile-side-icon"><ShieldCheck size={20} strokeWidth={1.7} /></div><h2>Sua conta</h2><p>O acesso ao Prospecta está vinculado a este e-mail.</p><dl><div><dt>E-mail</dt><dd>{email || "Não disponível"}</dd></div>{joinedOn && <div><dt>Perfil criado em</dt><dd>{joinedOn}</dd></div>}</dl></section>
-        <section className="profile-side-section profile-session"><h2>Sessão</h2><p>Ao sair, será necessário entrar novamente para acessar seus dados.</p><button className="profile-signout" type="button" onClick={onSignOut}><LogOut size={17} /> Sair da conta <ArrowRight size={16} /></button></section>
+        <section className="profile-side-section profile-session"><h2>Sessão</h2><p>Ao sair, será necessário entrar novamente para acessar seus dados.</p><button className="profile-signout" type="button" onClick={onSignOut}><LogOut size={17} /> Sair da conta</button></section>
       </aside>
     </div>}
 

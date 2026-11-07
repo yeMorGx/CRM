@@ -101,11 +101,12 @@ The CRM shell is the visual authority for authenticated pages. Login and onboard
 
 ## Colors
 
-The dashboard palette is charcoal and neutral gray, with lime as its one strong accent. Muted reds and stage-specific colors carry status meaning only.
+The dashboard palette is charcoal and neutral gray, with the saved avatar color as its one strong accent. Muted reds and stage-specific colors carry status meaning only.
 
 ### Primary
-- **Prospecta Lime** (`#8ee343`): primary actions, active navigation, progress, and selected data emphasis.
-- **Lime Hover** (`#b2f276`): restrained hover state for primary actions.
+- **Default Prospecta Lime** (`#8ee343`): the default accent for primary actions, active navigation, progress, and selected data emphasis.
+- **Default Lime Hover** (`#b2f276`): the default hover state for primary actions. Other saved avatar colors use a lightened hover tone.
+- **Profile Accent:** the saved avatar color also sets the CRM accent for primary actions, active navigation, focus rings, and selected elements. Charcoal surfaces and semantic status colors remain fixed.
 
 ### Neutral
 - **Carbon Canvas** (`#0a0b0b`): authenticated workspace background.
@@ -124,7 +125,7 @@ The dashboard palette is charcoal and neutral gray, with lime as its one strong 
 - **Auth Black** (`#050807`) and **Auth Green-Black** (`#07100d`): login/onboarding canvas and panel.
 - **Auth White** (`#edf5f0`) and **Auth Sage** (`#879f92`): authentication copy hierarchy.
 
-**The One Accent Rule.** Use lime to identify action or state, not as a large decorative wash. Keep normal dividers and secondary text neutral.
+**The One Accent Rule.** Use the selected profile accent to identify actions and active controls. Keep normal dividers and secondary text neutral.
 
 ## Typography
 

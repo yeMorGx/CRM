@@ -1,0 +1,21 @@
+const assert=require('node:assert/strict');
+require('./crm-insights.cjs');
+const {overviewCharts}=require('../src/lib/overview-charts.ts');
+const {insights}=require('../src/lib/crm-insights.ts');
+const now=new Date('2026-11-01T15:00:00Z');
+const leads=Array.from({length:7},(_,i)=>({id:String(i),name:'FIXTURE',status:i===6?'descartado':'novo',source:'Origem '+i,created_at:'2026-10-01T12:00:00Z'}));
+const task=(id,lead_id,due_at,done=false,cancelled_at=null)=>({id,lead_id,due_at,done,cancelled_at,title:'FIXTURE'});
+const data={leads,activities:[],proposals:[],profiles:[],trackingSince:null,tasks:[task('1','0','2026-11-01T14:00:00Z'),task('2','0','2026-11-01T17:00:00Z'),task('3','1',null),task('4','2','2026-11-04T15:00:00Z'),task('5','3','2026-11-20T15:00:00Z'),task('6','4',null,true),task('7','5',null,false,'2026-11-01T13:00:00Z')]};
+let m=insights(data,{},now),g=overviewCharts(m,now);
+assert.equal(g.coverage.reduce((n,r)=>n+r.value,0),m.active.length);assert.equal(g.coverage[0].value,4);assert.equal(g.coverage[1].value,2);
+assert.equal(g.tasks.reduce((n,r)=>n+r.value,0),m.pending.length);assert.deepEqual(g.tasks.map(r=>r.value),[1,1,1,1,1]);
+assert.equal(g.sources.reduce((n,r)=>n+r.value,0),leads.length);assert.equal(g.sources.at(-1).value,3);assert.equal(g.sources.at(-1).ids.length,3);
+assert.equal(g.stages.reduce((n,r)=>n+r.value,0),leads.length);assert.equal(g.activity.length,0);
+m=insights({...data,leads:[],tasks:[]},{},now);g=overviewCharts(m,now);assert.ok(g.coverage.every(r=>r.value===0));assert.ok(g.tasks.every(r=>r.value===0));assert.equal(g.sources.length,0);
+console.log('PASS: gráficos sem dados fictícios, cobertura sem dupla contagem, tarefas mutuamente exclusivas, origens agrupadas com drill-down exato e vazios.');
+
+const {overviewFinancials}=require('../src/lib/overview-charts.ts');
+const financialLead=(id,status,values={})=>({id,name:'FIXTURE',source:'manual',status,created_at:'2026-10-01T12:00:00Z',closed_at:'2026-10-20T12:00:00Z',...values});
+const financialModel=insights({...data,tasks:[],leads:[financialLead('w1','fechado',{confirmed_value:1000,estimated_value:9999}),financialLead('w2','fechado',{confirmed_value:null,closed_at:'2026-10-21T12:00:00Z'}),financialLead('w3','fechado',{confirmed_value:0}),financialLead('l1','perdido',{estimated_value:300,confirmed_value:9000}),financialLead('l2','perdido',{estimated_value:null}),financialLead('a1','novo',{estimated_value:200}),financialLead('a2','respondeu',{estimated_value:null}),financialLead('a3','validado',{estimated_value:0}),financialLead('n','nutricao',{estimated_value:50000}),financialLead('old','fechado',{confirmed_value:5000,closed_at:null})]},{from:'2026-10-01',to:'2026-11-01'},now);
+const money=overviewFinancials(financialModel);assert.equal(money.won.value,1000);assert.equal(money.won.unknown,1);assert.equal(money.lost.value,300);assert.equal(money.lost.unknown,1);assert.equal(money.potential.value,200);assert.equal(money.potential.unknown,1);assert.equal(money.potential.count,3);assert.equal(money.daily.find(r=>r.day==='2026-10-20').won,1000);assert.equal(money.daily.find(r=>r.day==='2026-10-21').won,null);assert.equal(money.daily.find(r=>r.day==='2026-10-22').won,0);assert.equal(money.funnel.find(r=>r.slug==='respondeu').value,null);assert.equal(money.funnel.find(r=>r.slug==='validado').value,0);assert.equal(money.funnel.reduce((n,r)=>n+r.count,0),3);
+console.log('PASS: vendas confirmadas separadas de estimativas, perdas sem custo inventado, potencial só ativo, valor zero distinto de ausente, lacunas e datas legadas.');

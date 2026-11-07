@@ -5,7 +5,15 @@ import { ConfigurationRequired } from "@/components/configuration-required";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 
-export default async function Home() {
+export default async function Home({ searchParams }: { searchParams: Promise<{ calendarIntegration?: string | string[]; provider?: string | string[]; view?: string }> }) {
+  const query = await searchParams;
+  const integrationStatus = Array.isArray(query.calendarIntegration) ? query.calendarIntegration[0] : query.calendarIntegration;
+  const integrationProvider = Array.isArray(query.provider) ? query.provider[0] : query.provider;
+  const integrationReturn = integrationStatus === "connected"
+    ? { status: "connected" as const, provider: integrationProvider }
+    : integrationStatus === "error"
+      ? { status: "error" as const, provider: integrationProvider }
+      : null;
   if (!isSupabaseConfigured) return <ConfigurationRequired />;
 
   const supabase = await createClient();
@@ -38,6 +46,13 @@ export default async function Home() {
     data.user.app_metadata?.crm_role === "admin"
     || Boolean(data.user.email && bootstrapAdmins.includes(data.user.email.toLowerCase()))
   );
+  const requestedAdminView = query.view === "plans" || query.view === "company";
+  if (requestedAdminView && !isAdmin) redirect("/");
 
-  return <CrmDashboard userEmail={currentUserEmail} profile={profile ? { ...profile, avatar_url: signedAvatar?.signedUrl ?? null } : null} isAdmin={isAdmin} />;
+  const initialView = query.view === "analytics" ? "analytics" : query.view === "documents" ? "documents"
+    : query.view === "canvas" ? "canvas"
+      : query.view === "plans" ? "plans"
+        : query.view === "company" ? "company"
+          : integrationReturn ? "settings" : undefined;
+  return <CrmDashboard userEmail={currentUserEmail} profile={profile ? { ...profile, avatar_url: signedAvatar?.signedUrl ?? null } : null} isAdmin={isAdmin} initialView={initialView} integrationReturn={integrationReturn} />;
 }

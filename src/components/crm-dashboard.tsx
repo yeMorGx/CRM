@@ -1,44 +1,37 @@
 "use client";
 
+import {AppSelect} from "@/components/app-select";
+
 import {
-  ArrowRight,
-  BarChart3,
   BookOpenText,
-  CalendarDays,
-  Check,
   ChevronDown,
-  CircleHelp,
+  ChevronRight,
   Clock3,
-  Filter,
   GripVertical,
   LayoutDashboard,
   List,
   LogOut,
   Menu,
   MessageCircle,
-  MoreHorizontal,
   PanelLeft,
   Plus,
   Search,
   Settings,
   Target,
-  UserRoundCog,
-  Users,
   X,
 } from "lucide-react";
 import Image from "next/image";
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useReducedMotion } from "motion/react";
 
 import { createClient } from "@/lib/supabase/client";
 import { type Lead, type LeadStatus, stages } from "@/lib/crm-types";
 import { LeadSearchModule } from "@/components/lead-search";
-import { CollaborationModule, MessagesWidget } from "@/components/collaboration";
+import { MessagesWidget } from "@/components/collaboration";
 import { EventCalendarModule } from "@/components/event-calendar";
+import { CalendarIntegrationsModule } from "@/components/calendar-integrations";
 import { LeadsTable } from "@/components/examples/c-table-7";
 import { ProfilePage, type Profile } from "@/components/profile-page";
-import { GradientWaveText } from "@/components/gradient-wave-text";
 import { NotificationsMenu } from "@/components/notifications-menu";
 import { PresenceTracker } from "@/components/presence-tracker";
 import { useAppToast } from "@/components/app-toast-provider";
@@ -46,25 +39,55 @@ import { publishSharedNotification } from "@/lib/notifications";
 import { fetchLeads } from "@/lib/leads-data";
 import { UserManagement } from "@/components/user-management";
 import { MessageLibrary } from "@/components/message-library";
+import './commercial.css';
+import { CommercialDashboard, CrmFiltersBar } from './commercial-dashboard';
+import {disconnectPush} from "@/lib/push-client";
+import {PeopleProvider} from './people-provider';
+import {AddLeadDialog} from './add-lead-dialog';
+import {DeleteLeadDialog} from './delete-lead-dialog';
+import {ActionsButton} from './item-actions';
+import {LeadActionsProvider,LeadContextMenu,LeadActionsButton,type LeadIntent} from './lead-actions';
+import { LeadWorkspace } from './lead-workspace';
+import { CrmTasks } from './crm-tasks';
+import { CrmAudit } from './crm-audit';
+import { useCrmWorkspace } from './use-crm-workspace';
+import { matchesLead, type CrmFilters } from '@/lib/crm-insights';
 import { WhatsAppPage } from "@/components/whatsapp-page";
-import { WhatsAppMark } from "@/components/whatsapp-mark";
+import { CanvasWorkspace } from "@/components/canvas-workspace";
+import { CommercialDocuments } from "@/components/contracts-library";
+import { PlansWorkspace } from "@/components/plans-workspace";
 
-type View = "overview" | "leads" | "pipeline" | "prospecting" | "messages" | "whatsapp" | "tasks" | "calendar" | "profile" | "users";
+type View = "analytics" | "audit" | "documents" | "canvas" | "plans" | "company" | "overview" | "leads" | "pipeline" | "prospecting" | "messages" | "whatsapp" | "tasks" | "calendar" | "settings" | "profile" | "users";
 
-const navItems: Array<{ label: string; view: View; icon: typeof LayoutDashboard }> = [
-  { label: "Visão geral", view: "overview", icon: LayoutDashboard },
-  { label: "Leads", view: "leads", icon: Users },
-  { label: "Pipeline", view: "pipeline", icon: Target },
-  { label: "Encontrar leads", view: "prospecting", icon: Search },
-  { label: "Mensagens prontas", view: "messages", icon: BookOpenText },
-  { label: "WhatsApp", view: "whatsapp", icon: MessageCircle },
-  { label: "Tarefas", view: "tasks", icon: Check },
-  { label: "Agenda", view: "calendar", icon: CalendarDays },
+type NavGroup = { id: string; label: string; icon: typeof LayoutDashboard; items: { label: string; view: View; adminOnly?: boolean }[] };
+const navGroups: NavGroup[] = [
+  { id: "commercial", label: "Comercial", icon: Target, items: [{ label: "Pipeline", view: "pipeline" }, { label: "Encontrar leads", view: "prospecting" }, { label: "Analytics", view: "analytics" }] },
+  { id: "communication", label: "Comunicação", icon: MessageCircle, items: [{ label: "WhatsApp", view: "whatsapp" }, { label: "Mensagens prontas", view: "messages" }] },
+  { id: "work", label: "Trabalho", icon: BookOpenText, items: [{ label: "Tarefas", view: "tasks" }, { label: "Agenda", view: "calendar" }, { label: "Canvas", view: "canvas" }, { label: "Documentos", view: "documents" }] },
+  { id: "management", label: "Gestão", icon: Settings, items: [{ label: "Integrações", view: "settings" }, { label: "Auditoria", view: "audit" }, { label: "Planos", view: "plans", adminOnly: true }, { label: "Empresa", view: "company", adminOnly: true }, { label: "Usuários", view: "users", adminOnly: true }] },
 ];
+function matchesNavView(current: View, destination: View) {
+  return current === destination || (destination === "pipeline" && current === "leads");
+}
 
-const dashboardWaveColors = ["#b2f276", "#d5f3c1", "#eff7e9", "#a8e77b", "#79c944", "#b2f276"];
+const defaultAccentColor = "#8ee343";
 
-const numberFormatter = new Intl.NumberFormat("pt-BR");
+function normalizeAccentColor(color?: string | null) {
+  return color && /^#[\da-f]{6}$/i.test(color) ? color.toLowerCase() : defaultAccentColor;
+}
+
+function colorChannels(color: string) {
+  return color.slice(1).match(/.{2}/g)?.map((channel) => Number.parseInt(channel, 16)) ?? [142, 227, 67];
+}
+
+function tintColor(color: string, amount: number) {
+  return `#${colorChannels(color).map((channel) => Math.round(channel + (255 - channel) * amount).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function accentHoverColor(color: string) {
+  return color === defaultAccentColor ? "#b2f276" : tintColor(color, 0.24);
+}
+
 
 function initials(name: string) {
   return name.split(" ").slice(0, 2).map((part) => part[0]).join("").toUpperCase();
@@ -74,22 +97,33 @@ function statusLabel(status: LeadStatus) {
   return stages.find((stage) => stage.slug === status)?.name ?? status;
 }
 
-export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmail?: string; profile: Profile | null; isAdmin?: boolean }) {
-  const [view, setView] = useState<View>("overview");
+export function CrmDashboard({ userEmail, profile, isAdmin = false, initialView, integrationReturn }: { userEmail?: string; profile: Profile | null; isAdmin?: boolean; initialView?: View; integrationReturn?: { status: "connected" | "error"; provider?: string } | null }) {
+  const [view, setView] = useState<View>(initialView ?? "overview");
   const [currentProfile, setCurrentProfile] = useState(profile);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openNavGroups, setOpenNavGroups] = useState<string[]>(() => navGroups.filter((group) => group.items.some((item) => matchesNavView(initialView ?? "overview", item.view))).map((group) => group.id));
+  const [taskTab, setTaskTab] = useState("pending");
+  const [commercialFilter, setCommercialFilter] = useState<CrmFilters>({});
+  const [desiredStage, setDesiredStage] = useState<LeadStatus | null>(null);
+  const workspace = useCrmWorkspace();
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<LeadStatus | "all">("all");
   const [leads, setLeads] = useState<Lead[]>([]);
   const [leadsLoading, setLeadsLoading] = useState(true);
   const [leadsError, setLeadsError] = useState(false);
   const [leadSort, setLeadSort] = useState<"score" | "reviews" | "rating" | "recent">("score");
+  const [leadToDelete,setLeadToDelete]=useState<Lead|null>(null);
+  const [leadIntent,setLeadIntent]=useState<LeadIntent>('details');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [notice, setNotice] = useState("");
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const openChat=useCallback(()=>setIsChatOpen(true),[]);
+  useEffect(()=>{let active=true;void Promise.resolve().then(()=>{if(active&&new URLSearchParams(window.location.search).get("chat")==="open")openChat();});window.addEventListener("prospecta:open-chat",openChat);return()=>{active=false;window.removeEventListener("prospecta:open-chat",openChat);};},[openChat]);
   const [onlineUserIds, setOnlineUserIds] = useState<string[]>([]);
-  const [todayLabel] = useState(() => new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date()));
+  const [todayLabel] = useState(() => {
+    const label = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
+    return `${label.charAt(0).toLocaleUpperCase("pt-BR")}${label.slice(1)}`;
+  });
   const supabase = useMemo(() => createClient(), []);
   const toast = useAppToast();
   const router = useRouter();
@@ -108,22 +142,28 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
       }
     }
     void loadLeads();
-    return () => { active = false; };
+    const refreshLeads = () => void loadLeads();
+    window.addEventListener("crm:changed", refreshLeads);
+    return () => { active = false; window.removeEventListener("crm:changed", refreshLeads); };
   }, [supabase, toast]);
 
+
   useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(""), 3200);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
+    if (!integrationReturn) return;
+    const providerNames: Record<string, string> = { google: "Google Calendar", microsoft: "Outlook Calendar", notion: "Notion" };
+    const providerName = providerNames[integrationReturn.provider ?? ""];
+    if (integrationReturn.status === "connected" && providerName) toast(`${providerName} conectado.`, "success");
+    else toast("Não foi possível concluir a conexão. Confira as configurações do provedor e tente novamente.", "error");
+    router.replace("/", { scroll: false });
+  }, [integrationReturn, router, toast]);
 
   const filteredLeads = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase("pt-BR");
-    return leads.filter((lead) => {
+    return leads.map(lead => ({ ...lead, ...workspace.data?.leads.find(item => item.id === lead.id) })).filter((lead) => {
       const matchesSearch = !normalizedSearch || [lead.name, lead.email, lead.address, lead.phone, lead.website, lead.notes, lead.cidade, lead.uf, lead.instagram, lead.maps_url, lead.source, statusLabel(lead.status), lead.score, lead.nota_google, lead.total_avaliacoes, lead.created_at, lead.updated_at, lead.favorito ? "favorito" : null].filter((value) => value != null).some((value) => String(value).toLocaleLowerCase("pt-BR").includes(normalizedSearch));
-      return matchesSearch && (stageFilter === "all" || lead.status === stageFilter);
+      return matchesSearch && matchesLead(lead, commercialFilter) && (stageFilter === "all" || lead.status === stageFilter);
     });
-  }, [leads, search, stageFilter]);
+  }, [leads, search, stageFilter, commercialFilter, workspace.data]);
 
   const sortedLeads = useMemo(() => [...filteredLeads].sort((a, b) => {
     const value = (lead: Lead) => leadSort === "score" ? lead.score : leadSort === "reviews" ? lead.total_avaliacoes : leadSort === "rating" ? lead.nota_google : new Date(lead.updated_at ?? lead.created_at ?? 0).getTime();
@@ -132,20 +172,16 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
     return second - first || new Date(b.updated_at ?? b.created_at ?? 0).getTime() - new Date(a.updated_at ?? a.created_at ?? 0).getTime();
   }), [filteredLeads, leadSort]);
 
-  const metrics = useMemo(() => {
-    const closed = leads.filter((lead) => lead.status === "fechado").length;
-    return {
-      total: leads.length,
-      open: leads.filter((lead) => lead.status !== "fechado" && lead.status !== "descartado").length,
-      qualified: leads.filter((lead) => lead.status === "qualificado").length,
-      closed,
-      conversion: leads.length ? Math.round((closed / leads.length) * 100) : 0,
-    };
-  }, [leads]);
-
   function changeView(nextView: View) {
+    if (nextView === "documents" && initialView !== "documents") { router.push("/documents"); return; }
+    if (nextView === "canvas" && initialView !== "canvas") { router.push("/canvas"); return; }
+    if (nextView === "plans" && initialView !== "plans") { router.push("/planos"); return; }
+    if (nextView === "company" && initialView !== "company") { router.push("/configuracoes/empresa"); return; }
     setView(nextView);
+    const activeGroup = navGroups.find((group) => group.items.some((item) => matchesNavView(nextView, item.view)));
+    if (activeGroup) setOpenNavGroups((current) => current.includes(activeGroup.id) ? current : [...current, activeGroup.id]);
     setSelectedLead(null);
+    setDesiredStage(null);
     setMobileMenuOpen(false);
     if (nextView === "pipeline" || nextView === "overview") setStageFilter("all");
   }
@@ -153,9 +189,11 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
   async function moveLead(leadId: string, status: LeadStatus) {
     const lead = leads.find((item) => item.id === leadId);
     if (!lead || lead.status === status) return;
+    if (["fechado", "perdido", "descartado"].includes(status)) { setDesiredStage(status); setSelectedLead(lead); return; }
     if (!supabase) { toast("Supabase não configurado.", "error"); return; }
     const { error } = await supabase.from("leads").update({ status }).eq("id", leadId);
     if (error) { toast("Não foi possível atualizar esse lead.", "error"); return; }
+    window.dispatchEvent(new Event("crm:changed"));
     setLeads((current) => current.map((item) => item.id === leadId ? { ...item, status } : item));
     setSelectedLead((current) => current?.id === leadId ? { ...current, status } : current);
     void publishSharedNotification("lead_stage_changed", leadId).then((ok) => {
@@ -192,7 +230,7 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
       });
     }
     setIsAddOpen(false);
-    if (!supabase) setNotice("Lead adicionado com sucesso.");
+    if (!supabase) toast("Lead adicionado com sucesso.","success");
   }
 
   function handleImported(importedLeads: Lead[]) {
@@ -201,14 +239,23 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
 
   async function signOut() {
     if (!supabase) return;
+    await disconnectPush().catch(()=>undefined);
     await supabase.auth.signOut();
     router.push("/login");
   }
 
   const displayName = currentProfile?.full_name?.trim() || userEmail?.split("@")[0] || "Usuário";
   const firstName = displayName.split(/\s+/)[0];
+  const accentColor = normalizeAccentColor(currentProfile?.avatar_color);
+  const [accentRed, accentGreen, accentBlue] = colorChannels(accentColor);
+  const crmThemeStyle = {
+    "--crm-accent": accentColor,
+    "--crm-accent-rgb": `${accentRed}, ${accentGreen}, ${accentBlue}`,
+    "--crm-accent-hover": accentHoverColor(accentColor),
+  } as CSSProperties;
+  const toastActor=useMemo(()=>currentProfile?{id:currentProfile.id,name:currentProfile.full_name||"Você",avatar:currentProfile.avatar_url,color:currentProfile.avatar_color}:null,[currentProfile]);
   return (
-    <div className="crm-shell">
+    <PeopleProvider current={toastActor}><LeadActionsProvider open={(lead,intent)=>{if(intent==="delete"){setLeadToDelete(lead);return;}setLeadIntent(intent);setDesiredStage(null);setSelectedLead(lead);}} favorite={toggleFavorite} notice={message=>toast(message,"info")}><div className="crm-shell" style={crmThemeStyle}>
       <aside className={`sidebar sidebar-rail ${mobileMenuOpen ? "sidebar-open" : ""}`}>
         <div className="brand-lockup">
           <Image className="brand-logo" src="/prospecta-logo.svg" alt="Prospecta" width={46} height={19} />
@@ -216,16 +263,26 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
           <button className="icon-button sidebar-close" onClick={() => setMobileMenuOpen(false)} aria-label="Fechar menu"><X size={18} /></button>
         </div>
         <nav className="main-nav" aria-label="Navegação principal">
-          <p className="nav-caption">CRM</p>
-          {[...navItems, ...(isAdmin ? [{ label: "Usuários", view: "users" as const, icon: UserRoundCog }] : [])].map((item) => {
-            const Icon = item.icon;
-            const active = view === item.view;
-            return <button key={item.view} title={item.label} aria-label={item.label} className={`nav-item ${active ? "nav-item-active" : ""}`} onClick={() => changeView(item.view)}>{item.view === "whatsapp" ? <WhatsAppMark size={18} /> : <Icon size={18} strokeWidth={active ? 2.3 : 1.8} />}<span>{item.label}</span></button>;
+          <button type="button" title="Visão geral" aria-label="Visão geral" aria-current={view === "overview" ? "page" : undefined} className={`nav-item ${view === "overview" ? "nav-item-active" : ""}`} onClick={() => changeView("overview")}><LayoutDashboard size={18} /><span>Visão geral</span></button>
+          {navGroups.map((group) => {
+            const Icon = group.icon;
+            const items = group.items.filter((item) => !item.adminOnly || isAdmin);
+            const active = items.some((item) => matchesNavView(view, item.view));
+            const expanded = openNavGroups.includes(group.id);
+            return <div className={`sidebar-category ${active ? "sidebar-category-current" : ""}`} data-expanded={expanded} key={group.id}>
+              <button type="button" title={group.label} aria-label={group.label} aria-expanded={expanded} aria-controls={`nav-${group.id}`} className="nav-item sidebar-category-trigger" onClick={() => setOpenNavGroups((current) => expanded ? current.filter((id) => id !== group.id) : [...current, group.id])}>
+                <Icon size={18} /><span>{group.label}</span><ChevronDown size={14} className={`sidebar-category-chevron ${expanded ? "is-expanded" : ""}`} />
+              </button>
+              <div id={`nav-${group.id}`} className="sidebar-tree-reveal" aria-hidden={!expanded} inert={!expanded}><div className="sidebar-tree-clip"><ul className="sidebar-tree">
+                {items.map((item, index) => {
+                  const selected = matchesNavView(view, item.view);
+                  return <li key={item.view} style={{ "--nav-index": index } as CSSProperties}><button type="button" aria-current={selected ? "page" : undefined} className={`sidebar-tree-link ${selected ? "is-current" : ""}`} onClick={() => changeView(item.view)}>{item.label}</button></li>;
+                })}
+              </ul></div></div>
+            </div>;
           })}
         </nav>
         <div className="sidebar-bottom">
-          <button className="nav-item" title="Configurações" aria-label="Configurações" onClick={() => setNotice("Configurações em breve.")}><Settings size={18} /><span>Configurações</span></button>
-          <button className="nav-item" title="Ajuda" aria-label="Ajuda" onClick={() => setNotice("Central de ajuda em breve.")}><CircleHelp size={18} /><span>Ajuda</span></button>
           <button className={`profile-row ${view === "profile" ? "profile-row-active" : ""}`} title="Meu perfil" aria-label="Meu perfil" onClick={() => changeView("profile")}><div className="profile-avatar" style={currentProfile?.avatar_color ? { backgroundColor: currentProfile.avatar_color } : undefined}>{currentProfile?.avatar_url ? <Image src={currentProfile.avatar_url} alt="" width={34} height={34} unoptimized /> : initials(displayName)}</div><div className="profile-copy"><strong>{displayName}</strong><span>{userEmail}</span></div></button>
           <button className="nav-item sidebar-signout" title="Sair da conta" aria-label="Sair da conta" onClick={signOut}><LogOut size={18} /><span>Sair</span></button>
         </div>
@@ -233,26 +290,35 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
 
       <main className="main-content">
         <header className="topbar">
-          <div className="topbar-left"><button className="icon-button mobile-menu-button" onClick={() => setMobileMenuOpen(true)} aria-label="Abrir menu"><Menu size={20} /></button><button className="icon-button desktop-panel-button" aria-label="Alternar painel"><PanelLeft size={19} /></button><div className="breadcrumb"><span>Prospecta</span><ArrowRight size={14} /><strong>{view === "profile" ? "Meu perfil" : view === "users" ? "Usuários" : view === "pipeline" ? "Pipeline" : view === "leads" ? "Leads" : view === "prospecting" ? "Encontrar leads" : view === "messages" ? "Mensagens prontas" : view === "whatsapp" ? "WhatsApp" : view === "tasks" ? "Tarefas" : view === "calendar" ? "Agenda" : "Visão geral"}</strong></div></div>
-          <div className="topbar-actions">{!["profile", "users", "messages", "whatsapp"].includes(view) && <button className="dashboard-period" type="button" title="Período atual"><Clock3 size={14} /> Todos os registros <ChevronDown size={14} /></button>}<NotificationsMenu userId={currentProfile?.id ?? null} onOpenChat={() => setIsChatOpen(true)} /></div>
+          <div className="topbar-left"><button className="icon-button mobile-menu-button" onClick={() => setMobileMenuOpen(true)} aria-label="Abrir menu"><Menu size={20} /></button><button className="icon-button desktop-panel-button" aria-label="Alternar painel"><PanelLeft size={19} /></button><div className="breadcrumb"><span>Prospecta</span><ChevronRight size={14} /><strong>{view === "analytics" ? "Analytics" : view === "audit" ? "Auditoria" : view === "documents" ? "Documentos" : view === "canvas" ? "Canvas" : view === "plans" ? "Planos" : view === "company" ? "Empresa" : view === "profile" ? "Meu perfil" : view === "users" ? "Usuários" : view === "pipeline" ? "Pipeline" : view === "leads" ? "Leads" : view === "prospecting" ? "Encontrar leads" : view === "messages" ? "Mensagens prontas" : view === "whatsapp" ? "WhatsApp" : view === "tasks" ? "Tarefas" : view === "calendar" ? "Agenda" : view === "settings" ? "Configurações" : "Visão geral"}</strong></div></div>
+          <div className="topbar-actions">{!["overview", "analytics", "audit", "profile", "users", "messages", "whatsapp", "settings", "plans", "company"].includes(view) && <button className="dashboard-period" type="button" title="Período atual"><Clock3 size={14} /> Todos os registros <ChevronDown size={14} /></button>}<NotificationsMenu userId={currentProfile?.id ?? null} onOpenChat={openChat} /></div>
         </header>
         <div className="page-wrap">
-          {view === "profile" ? (
+          {view === "documents" ? (
+            <CommercialDocuments onSelect={setSelectedLead} />
+          ) : view === "canvas" ? (
+            <CanvasWorkspace />
+          ) : (view === "plans" || view === "company") && isAdmin ? (
+            <PlansWorkspace initialTab={view === "company" ? "company" : "plans"} />
+          ) : view === "profile" ? (
             <ProfilePage profile={currentProfile} email={userEmail} onSaved={setCurrentProfile} onSignOut={signOut} />
           ) : view === "users" && isAdmin ? (
             <UserManagement currentUserId={currentProfile?.id ?? ""} />
           ) : view === "prospecting" ? (
-            <LeadSearchModule onImported={handleImported} onNotice={setNotice} />
+            <LeadSearchModule onImported={handleImported} onNotice={message=>toast(message,"info")} />
           ) : view === "messages" ? (
             <MessageLibrary userId={currentProfile?.id ?? null} onOpenWhatsApp={() => changeView("whatsapp")} />
           ) : view === "whatsapp" ? (
             <WhatsAppPage leads={leads} supabase={supabase} onOpenLibrary={() => changeView("messages")} onOpenLeads={() => changeView("leads")} onOpenLead={setSelectedLead} />
           ) : view === "tasks" ? (
-            <CollaborationModule />
+            <CrmTasks initialTab={taskTab} onSelect={setSelectedLead} />
           ) : view === "calendar" ? (
             <EventCalendarModule />
-          ) : view === "overview" ? (
-            <DashboardOverview firstName={firstName} todayLabel={todayLabel} leads={leads} metrics={metrics} onAdd={() => setIsAddOpen(true)} onSelect={setSelectedLead} />
+          ) : view === "settings" ? (
+            <CalendarIntegrationsModule />
+          ) : view === "audit" ? (<CrmAudit onSelect={setSelectedLead} />
+          ) : view === "overview" || view === "analytics" ? (
+            <CommercialDashboard accent={accentColor} firstName={firstName} todayLabel={todayLabel} analytics={view === "analytics"} onTasks={(filter) => { setTaskTab(filter || "pending"); changeView("tasks"); }} onFilter={(filters) => { changeView("leads"); setCommercialFilter(filters); setStageFilter("all"); }} onAdd={() => setIsAddOpen(true)} onSelect={setSelectedLead} />
           ) : (
             <>
               <div className="page-heading">
@@ -260,17 +326,18 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
                 <button className="primary-button" onClick={() => setIsAddOpen(true)}><Plus size={17} /> Adicionar lead</button>
               </div>
               <section className="content-card">
-                <div className="content-card-header">
+                  <div className="content-card-header">
                   <div><h2>{view === "pipeline" ? "Pipeline de vendas" : "Leads recentes"}</h2><p>{filteredLeads.length} oportunidades encontradas</p></div>
                   <div className="view-actions flex-wrap">
                     <div className="segmented-control" role="group" aria-label="Visualização">
                       <button className={view === "pipeline" ? "segment-active" : ""} onClick={() => changeView("pipeline")}><LayoutDashboard size={15} /> Kanban</button>
                       <button className={view !== "pipeline" ? "segment-active" : ""} onClick={() => changeView("leads")}><List size={15} /> Lista</button>
                     </div>
-                    <button className="secondary-button filter-button" onClick={() => setStageFilter(stageFilter === "all" ? "novo" : "all")}><Filter size={15} />{stageFilter === "all" ? "Filtrar" : statusLabel(stageFilter)}</button>
-                    {view === "leads" && <label><span className="sr-only">Ordenar leads</span><select value={leadSort} onChange={(event) => setLeadSort(event.target.value as typeof leadSort)} aria-label="Ordenar leads" className="h-9 rounded-lg border border-[var(--crm-line-strong)] bg-[var(--crm-surface-raised)] px-2 text-[10px] text-[var(--crm-text)] outline-none transition-colors duration-150 hover:border-[var(--crm-lime)] focus-visible:border-[var(--crm-lime)]"><option value="score">Ordenar: oportunidade</option><option value="reviews">Ordenar: avaliações</option><option value="rating">Ordenar: nota Google</option><option value="recent">Ordenar: mais recentes</option></select></label>}
+                    
+                    {view === "leads" && <label><span className="sr-only">Ordenar leads</span><AppSelect value={leadSort} onChange={(event) => setLeadSort(event.target.value as typeof leadSort)} aria-label="Ordenar leads" className="h-9 rounded-lg border border-[var(--crm-line-strong)] bg-[var(--crm-surface-raised)] px-2 text-[10px] text-[var(--crm-text)] outline-none transition-colors duration-150 hover:border-[var(--crm-accent)] focus-visible:border-[var(--crm-accent)]"><option value="score">Ordenar: oportunidade</option><option value="reviews">Ordenar: avaliações</option><option value="rating">Ordenar: nota Google</option><option value="recent">Ordenar: mais recentes</option></AppSelect></label>}
                   </div>
                 </div>
+                {workspace.data && <CrmFiltersBar data={workspace.data} value={commercialFilter} onChange={setCommercialFilter} period={false} />}
                 <div className="toolbar">
                   <div className="search-field">
                     <Search size={17} />
@@ -279,154 +346,29 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false }: { userEmai
                   </div>
                   <span className="toolbar-hint">{view === "pipeline" ? "Arraste os cards para atualizar o estágio" : "Clique em um lead para ver os detalhes"}</span>
                 </div>
-                <PipelineBoard key={view === "leads" ? `${leadSort}:${stageFilter}:${search}` : "pipeline"} leads={view === "leads" ? sortedLeads : filteredLeads} loading={leadsLoading} error={leadsError} onMove={moveLead} onFavoriteChange={toggleFavorite} onNotice={setNotice} onSelect={setSelectedLead} onAdd={() => setIsAddOpen(true)} showList={view === "leads"} />
+                <PipelineBoard key={view === "leads" ? `${leadSort}:${stageFilter}:${search}` : "pipeline"} leads={view === "leads" ? sortedLeads : filteredLeads} loading={leadsLoading} error={leadsError} onMove={moveLead} onFavoriteChange={toggleFavorite} onNotice={message=>toast(message,"info")} onSelect={setSelectedLead} onAdd={() => setIsAddOpen(true)} showList={view === "leads"} />
               </section>
             </>
           )}
         </div>
       </main>
 
-      {selectedLead && <LeadDrawer lead={selectedLead} onClose={() => setSelectedLead(null)} />}
-      {isAddOpen && <AddLeadModal onClose={() => setIsAddOpen(false)} onSubmit={addLead} />}
+      {selectedLead && <LeadWorkspace key={selectedLead.id} lead={selectedLead} desiredStage={desiredStage} initialIntent={leadIntent} onDeleteRequest={()=>{setLeadToDelete(selectedLead);setSelectedLead(null);setLeadIntent("details");}} onSaved={(updated) => { setLeads(current => current.map(l => l.id === updated.id ? updated : l)); setSelectedLead(updated); setDesiredStage(null); }} onClose={() => { setSelectedLead(null); setDesiredStage(null); setLeadIntent("details"); }} />}
+      {leadToDelete&&<DeleteLeadDialog lead={leadToDelete} onClose={()=>setLeadToDelete(null)} onDeleted={id=>{setLeads(current=>current.filter(l=>l.id!==id));setLeadToDelete(null);toast("Lead apagado.","success");}}/>}
+      {isAddOpen && <AddLeadDialog onClose={() => setIsAddOpen(false)} onSubmit={addLead} />}
       <PresenceTracker userId={currentProfile?.id ?? null} onOnlineChange={setOnlineUserIds} />
       <MessagesWidget profile={currentProfile} onlineUserIds={onlineUserIds} isOpen={isChatOpen} onOpenChange={setIsChatOpen} />
-      {notice && <div className="toast"><Check size={16} />{notice}</div>}
       {mobileMenuOpen && <button className="mobile-overlay" onClick={() => setMobileMenuOpen(false)} aria-label="Fechar menu" />}
-    </div>
+    </div></LeadActionsProvider></PeopleProvider>
   );
-}
-
-function DashboardOverview({ firstName, todayLabel, leads, metrics, onAdd, onSelect }: { firstName: string; todayLabel: string; leads: Lead[]; metrics: { total: number; open: number; qualified: number; closed: number; conversion: number }; onAdd: () => void; onSelect: (lead: Lead) => void }) {
-  const reducedMotion = useReducedMotion();
-  const localHour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", hour: "2-digit", hourCycle: "h23" }).format(new Date()));
-  const greeting = localHour < 12 ? "Bom dia" : localHour < 18 ? "Boa tarde" : "Boa noite";
-  const stageCounts = stages.map((stage) => ({ ...stage, count: leads.filter((lead) => lead.status === stage.slug).length }));
-  const maxStageCount = Math.max(1, ...stageCounts.map((stage) => stage.count));
-  const pipelineHealth = metrics.total ? Math.round(((metrics.qualified + metrics.closed) / metrics.total) * 100) : 0;
-  const recentLeads = leads.slice(0, 5);
-
-  return <div className="dashboard-overview">
-    <section className="dashboard-hero">
-      <div className="dashboard-welcome">
-        <p className="dashboard-kicker">{todayLabel}</p>
-        <h1 className="dashboard-welcome-name" aria-label={`${greeting}, ${firstName}`}>
-          <span>{greeting},</span>
-          <span className="dashboard-gradient-wave-wrap" aria-hidden="true">
-            <GradientWaveText className="dashboard-gradient-wave" align="left" speed={0.9} delay={0.08} paused={Boolean(reducedMotion)} customColors={dashboardWaveColors}>{firstName}</GradientWaveText>
-          </span>
-        </h1>
-        <p>Uma visão clara do que está acontecendo com seus leads.</p>
-      </div>
-      <button className="primary-button dashboard-add-button" onClick={onAdd}><Plus size={17} /> Adicionar lead</button>
-    </section>
-
-    <section className="dashboard-kpi-grid" aria-label="Resumo do pipeline">
-      <DashboardKpi label="Leads no pipeline" value={metrics.total} detail="registros atuais" icon={Users} tone="lime" />
-      <DashboardKpi label="Em aberto" value={metrics.open} detail="aguardando avanço" icon={Target} tone="neutral" />
-      <DashboardKpi label="Em negociação" value={metrics.qualified} detail="em acompanhamento" icon={Check} tone="lime" />
-      <DashboardKpi label="Conversão" value={`${metrics.conversion}%`} detail="leads fechados" icon={BarChart3} tone="red" />
-    </section>
-
-    <div className="dashboard-main-grid">
-      <section className="dashboard-card dashboard-pipeline-card">
-        <div className="dashboard-card-header"><div><p className="dashboard-card-eyebrow">Visão do pipeline</p><h2>Leads por estágio</h2><p>Distribuição real dos seus registros atuais.</p></div><span className="dashboard-data-badge">{metrics.total} total</span></div>
-        {leads.length ? <div className="pipeline-bars">{stageCounts.map((stage) => <div className="pipeline-bar-row" key={stage.slug}><div className="pipeline-bar-label"><span className="pipeline-dot" style={{ backgroundColor: stage.color }} /><span>{stage.name}</span><strong>{stage.count}</strong></div><div className="pipeline-track"><span style={{ width: `${Math.max(stage.count ? 8 : 0, (stage.count / maxStageCount) * 100)}%`, backgroundColor: stage.color }} /></div></div>)}</div> : <DashboardEmpty icon={BarChart3} title="Seu pipeline ainda está vazio" description="Adicione um lead para acompanhar a evolução por estágio." actionLabel="Adicionar primeiro lead" onAction={onAdd} />}
-        <div className="dashboard-card-footer"><span><span className="legend-dot legend-dot-lime" /> Dados do Supabase</span><span>Atualizado agora</span></div>
-      </section>
-
-      <aside className="dashboard-side-stack">
-        <section className="dashboard-card dashboard-health-card"><div className="dashboard-card-header compact"><div><p className="dashboard-card-eyebrow">Indicador</p><h2>Saúde do pipeline</h2></div><div className="health-ring" style={{ "--health": `${pipelineHealth}%` } as CSSProperties}><span>{pipelineHealth}</span></div></div><p className="dashboard-health-copy">Percentual de leads em negociação ou fechados.</p><div className="health-progress"><span style={{ width: `${pipelineHealth}%` }} /></div></section>
-        <section className="dashboard-card dashboard-activity-card"><div className="dashboard-card-header compact"><div><p className="dashboard-card-eyebrow">Atualizações</p><h2>Atividade recente</h2></div><span className="dashboard-subtle-count">{recentLeads.length} itens</span></div>{recentLeads.length ? <div className="dashboard-activity-list">{recentLeads.map((lead) => <button className="dashboard-activity-item" key={lead.id} onClick={() => onSelect(lead)}><span className="dashboard-activity-avatar">{initials(lead.name)}</span><span className="dashboard-activity-copy"><strong>{lead.name}</strong><span>{statusLabel(lead.status)} · {lead.source}</span></span><span className="dashboard-activity-date">{lead.updated_at ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" }).format(new Date(lead.updated_at)) : "agora"}</span></button>)}</div> : <div className="dashboard-activity-empty"><Clock3 size={18} /><span>As atualizações aparecerão aqui quando você cadastrar leads.</span></div>}</section>
-      </aside>
-    </div>
-
-    <section className="dashboard-secondary-grid" aria-label="Indicadores adicionais"><DashboardStat label="Leads fechados" value={metrics.closed} note="resultado atual" /><DashboardStat label="Sem contato" value={leads.filter((lead) => lead.status === "novo").length} note="próximo passo sugerido" /><DashboardStat label="Qualificados" value={metrics.qualified} note="oportunidades prontas" /><DashboardStat label="Conversão" value={`${metrics.conversion}%`} note="fechados / total" /><DashboardStat label="Saúde" value={`${pipelineHealth}%`} note="pipeline ativo" accent /></section>
-
-    <section className="dashboard-card dashboard-latest-card"><div className="dashboard-card-header"><div><p className="dashboard-card-eyebrow">Registros</p><h2>Leads recentes</h2><p>Os últimos registros adicionados ou atualizados.</p></div><span className="dashboard-inline-action">{leads.length ? "Dados atuais" : "Sem registros"}</span></div>{recentLeads.length ? <div className="dashboard-lead-grid">{recentLeads.map((lead) => <button className="dashboard-lead-card" key={lead.id} onClick={() => onSelect(lead)}><div className="dashboard-lead-card-top"><span className={`status-chip status-${lead.status}`}>{statusLabel(lead.status)}</span><ArrowRight size={15} /></div><strong>{lead.name}</strong><span>{lead.address || "Localização não informada"}</span><small>{lead.phone || "Telefone não informado"}</small></button>)}</div> : <DashboardEmpty icon={Users} title="Nenhum lead cadastrado" description="Comece adicionando um registro manualmente ou encontre leads na busca." actionLabel="Adicionar lead" onAction={onAdd} />}</section>
-
-    <div className="dashboard-bottom-grid"><section className="dashboard-card dashboard-tasks-card"><div className="dashboard-card-header compact"><div><p className="dashboard-card-eyebrow">Organização</p><h2>Próximas tarefas</h2></div><span className="dashboard-subtle-count">Em breve</span></div><div className="dashboard-feature-empty"><Check size={20} /><div><strong>Nenhuma tarefa pendente</strong><span>Use a área de Tarefas para registrar os próximos passos do time.</span></div></div></section><section className="dashboard-card dashboard-sources-card"><div className="dashboard-card-header compact"><div><p className="dashboard-card-eyebrow">Distribuição</p><h2>Estágios ativos</h2></div><Target size={18} /></div><div className="dashboard-stage-list">{stageCounts.map((stage) => <div key={stage.slug}><span><i className="pipeline-dot" style={{ backgroundColor: stage.color }} />{stage.name}</span><strong>{stage.count}</strong></div>)}</div></section></div>
-  </div>;
-}
-
-function DashboardKpi({ label, value, detail, icon: Icon, tone }: { label: string; value: string | number; detail: string; icon: typeof Users; tone: "lime" | "neutral" | "red" }) {
-  return <article className={`dashboard-kpi-card dashboard-kpi-${tone}`}><div className="dashboard-kpi-top"><span>{label}</span><span className="dashboard-kpi-icon"><Icon size={16} /></span></div><strong>{typeof value === "number" ? numberFormatter.format(value) : value}</strong><span>{detail}</span><div className="dashboard-kpi-line" /></article>;
-}
-
-function DashboardStat({ label, value, note, accent = false }: { label: string; value: string | number; note: string; accent?: boolean }) {
-  return <article className={`dashboard-stat ${accent ? "dashboard-stat-accent" : ""}`}><span>{label}</span><strong>{typeof value === "number" ? numberFormatter.format(value) : value}</strong><small>{note}</small></article>;
-}
-
-function DashboardEmpty({ icon: Icon, title, description, actionLabel, onAction }: { icon: typeof Users; title: string; description: string; actionLabel: string; onAction: () => void }) {
-  return <div className="dashboard-empty"><span className="dashboard-empty-icon"><Icon size={18} /></span><strong>{title}</strong><p>{description}</p><button className="secondary-button" onClick={onAction}><Plus size={14} /> {actionLabel}</button></div>;
 }
 
 function PipelineBoard({ leads, loading, error, onMove, onFavoriteChange, onNotice, onSelect, onAdd, showList }: { leads: Lead[]; loading: boolean; error: boolean; onMove: (id: string, status: LeadStatus) => Promise<void>; onFavoriteChange: (id: string, favorite: boolean) => Promise<void>; onNotice: (message: string) => void; onSelect: (lead: Lead) => void; onAdd: () => void; showList: boolean }) {
   if (showList) return <LeadsTable leads={leads} loading={loading} error={error} onSelect={onSelect} onStageChange={onMove} onFavoriteChange={onFavoriteChange} onNotice={onNotice} />;
-  return <div className="kanban-grid">{stages.map((stage) => { const stageLeads = leads.filter((lead) => lead.status === stage.slug); return <div className="kanban-column" key={stage.slug} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("leadId"); if (id) onMove(id, stage.slug); }}><div className="kanban-column-header"><div><span className="stage-dot" style={{ backgroundColor: stage.color }} /><h3>{stage.name}</h3><span className="column-count">{stageLeads.length}</span></div><button aria-label={`Opções de ${stage.name}`}><MoreHorizontal size={17} /></button></div><div className="kanban-cards">{stageLeads.map((lead) => <LeadCard key={lead.id} lead={lead} onSelect={onSelect} />)}{stageLeads.length === 0 && <div className="empty-column">Solte um lead aqui</div>}</div><button className="add-card-button" onClick={onAdd}><Plus size={15} /> Adicionar lead</button></div>; })}</div>;
+  return <div className="kanban-grid">{stages.map((stage) => { const stageLeads = leads.filter((lead) => lead.status === stage.slug); return <div className="kanban-column" key={stage.slug} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("leadId"); if (id) onMove(id, stage.slug); }}><div className="kanban-column-header"><div><span className="stage-dot" style={{ backgroundColor: stage.color }} /><h3>{stage.name}</h3><span className="column-count">{stageLeads.length}</span></div><ActionsButton label={`Opções de ${stage.name}`} actions={[{label:"Adicionar lead",run:onAdd},{label:"Copiar nomes desta etapa",disabled:!stageLeads.length,run:()=>{void navigator.clipboard.writeText(stageLeads.map(l=>l.name).join("\n")).then(()=>onNotice("Nomes copiados."),()=>onNotice("Não foi possível copiar."));}}]}/></div><div className="kanban-cards">{stageLeads.map((lead) => <LeadCard key={lead.id} lead={lead} onSelect={onSelect} />)}{stageLeads.length === 0 && <div className="empty-column">Solte um lead aqui</div>}</div><button className="add-card-button" onClick={onAdd}><Plus size={15} /> Adicionar lead</button></div>; })}</div>;
 }
 
 function LeadCard({ lead, onSelect }: { lead: Lead; onSelect: (lead: Lead) => void }) {
-  return <article className="lead-card" draggable onDragStart={(event) => event.dataTransfer.setData("leadId", lead.id)} onClick={() => onSelect(lead)}><div className="lead-card-top"><span className="lead-source">{lead.source}</span><GripVertical className="drag-handle" size={16} /></div><h4>{lead.name}</h4><p>{lead.address}</p><div className="lead-card-footer"><span className="lead-avatar small">{initials(lead.name)}</span><span>{lead.phone}</span><button onClick={(event) => { event.stopPropagation(); onSelect(lead); }} aria-label={`Abrir ${lead.name}`}><ArrowRight size={15} /></button></div></article>;
+  return <LeadContextMenu lead={lead} trigger={<article className="lead-card" tabIndex={0} onKeyDown={e=>{if(e.target===e.currentTarget&&e.key==="Enter")onSelect(lead);}} draggable onDragStart={(event) => event.dataTransfer.setData("leadId", lead.id)} onClick={() => onSelect(lead)}><div className="lead-card-top"><span className="lead-source">{lead.source}</span><div className="crm-card-controls"><GripVertical className="drag-handle" size={16} /><LeadActionsButton lead={lead}/></div></div><h4>{lead.name}</h4><p>{lead.segment || lead.address}</p>{lead.estimated_value != null && <p className="crm-card-value">{new Intl.NumberFormat("pt-BR", { style:"currency",currency:"BRL" }).format(lead.estimated_value)}</p>}{lead.next_action_at && <p>Próximo passo: {new Intl.DateTimeFormat("pt-BR",{timeZone:"America/Sao_Paulo",dateStyle:"short"}).format(new Date(lead.next_action_at))}</p>}{lead.plan_name && <small>{lead.plan_name} · {lead.contract_status || "Sem contrato"}</small>}<div className="lead-card-footer"><span className="lead-avatar small">{initials(lead.name)}</span><span>{lead.phone}</span></div></article>}/>;
 }
 
-function AddLeadModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (formData: FormData) => void }) {
-  return (
-    <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <form className="modal-card" action={onSubmit}>
-        <div className="modal-header">
-          <div><p className="eyebrow">Novo registro</p><h2>Adicionar lead</h2></div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
-        </div>
-        <label>Nome da empresa<input name="name" placeholder="Ex.: Restaurante Maré" autoFocus required /></label>
-        <label>E-mail<input name="email" type="email" autoComplete="email" placeholder="contato@empresa.com.br" /></label>
-        <label>Telefone<input name="phone" placeholder="(13) 99999-0000" /></label>
-        <label>Endereço<input name="address" placeholder="Bairro, cidade — UF" /></label>
-        <label>Site<input name="website" placeholder="https://empresa.com.br" type="url" /></label>
-        <label>Observações<textarea name="notes" placeholder="Informações importantes sobre este lead..." rows={3} /></label>
-        <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
-          <button className="primary-button" type="submit"><Plus size={16} /> Criar lead</button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function LeadDrawer({ lead, onClose }: { lead: Lead; onClose: () => void }) {
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) { if (event.key === "Escape") onClose(); }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
-
-  const createdLabel = lead.created_at && !Number.isNaN(new Date(lead.created_at).getTime())
-    ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(lead.created_at))
-    : null;
-  const updatedLabel = lead.updated_at && !Number.isNaN(new Date(lead.updated_at).getTime())
-    ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(lead.updated_at))
-    : null;
-
-  return <div className="drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <aside className="lead-drawer lead-details-drawer" role="dialog" aria-modal="true" aria-labelledby="lead-details-title">
-      <div className="drawer-header"><div><span className={`status-chip status-${lead.status}`}>{statusLabel(lead.status)}</span><h2 id="lead-details-title">{lead.name}</h2><p>Informações do lead</p></div><button className="icon-button" onClick={onClose} aria-label="Fechar detalhes" autoFocus><X size={19} /></button></div>
-      <div className="drawer-section">
-        <p className="drawer-label">Contato</p>
-        <div className="contact-item"><span>Telefone</span><strong>{lead.phone || "Não informado"}</strong></div>
-        <div className="contact-item"><span>E-mail</span><strong>{lead.email || "Não informado"}</strong></div>
-        <div className="contact-item"><span>Website</span><strong>{lead.website || "Não informado"}</strong></div>
-      </div>
-      <div className="drawer-section">
-        <p className="drawer-label">Empresa</p>
-        <div className="contact-item"><span>Endereço</span><strong>{lead.address || "Não informado"}</strong></div>
-        <div className="contact-item"><span>Cidade / UF</span><strong>{[lead.cidade, lead.uf].filter(Boolean).join(" - ") || "Não informado"}</strong></div>
-        <div className="contact-item"><span>Instagram</span><strong>{lead.instagram || "Não informado"}</strong></div>
-        <div className="contact-item"><span>Oportunidade</span><strong>{lead.score ?? "—"}</strong></div>
-        <div className="contact-item"><span>Google</span><strong>{lead.nota_google == null ? "—" : `${lead.nota_google.toLocaleString("pt-BR")} · ${lead.total_avaliacoes?.toLocaleString("pt-BR") ?? "—"} avaliações`}</strong></div>
-        <div className="contact-item"><span>Origem</span><strong>{lead.source}</strong></div>
-        {createdLabel && <div className="contact-item"><span>Cadastrado em</span><strong>{createdLabel}</strong></div>}
-        {updatedLabel && <div className="contact-item"><span>Atualizado em</span><strong>{updatedLabel}</strong></div>}
-      </div>
-      {lead.notes && <div className="drawer-section"><p className="drawer-label">Observações</p><p className="lead-details-notes">{lead.notes}</p></div>}
-    </aside>
-  </div>;
-}

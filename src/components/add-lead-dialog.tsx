@@ -1,0 +1,9 @@
+"use client";
+import {useState,type FormEvent} from 'react';
+import {Plus,X} from 'lucide-react';
+import {AppDialog} from './app-dialog';
+export function AddLeadDialog({onClose,onSubmit}:{onClose:()=>void;onSubmit:(data:FormData)=>void|Promise<void>}){
+ const [busy,setBusy]=useState(false);
+ async function save(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy(true);try{await onSubmit(new FormData(event.currentTarget));}finally{setBusy(false);}}
+ return <AppDialog label="Adicionar lead" onClose={onClose} busy={busy} className="app-new-lead-dialog"><form className="app-dialog-form" onSubmit={save}><header className="app-dialog-header"><h2>Adicionar lead</h2><button type="button" className="icon-button" aria-label="Fechar novo lead" onClick={onClose} disabled={busy}><X size={18}/></button></header><label>Nome da empresa<input name="name" autoFocus required maxLength={180} placeholder="Nome do lead"/></label><div className="crm-form-grid"><label>Telefone<input name="phone" type="tel" autoComplete="tel" placeholder="(13) 99999-0000"/></label><label>E-mail<input name="email" type="email" autoComplete="email" placeholder="contato@empresa.com.br"/></label></div><details><summary>Endereço, site e observações</summary><div className="app-optional-fields"><label>Endereço<input name="address" placeholder="Bairro, cidade — UF"/></label><label>Site<input name="website" type="url" placeholder="https://empresa.com.br"/></label><label>Observações<textarea name="notes" rows={3}/></label></div></details><footer className="app-dialog-actions"><button type="button" className="secondary-button" onClick={onClose} disabled={busy}>Cancelar</button><button type="submit" className="primary-button" disabled={busy}><Plus size={15}/>{busy?'Criando…':'Criar lead'}</button></footer></form></AppDialog>;
+}

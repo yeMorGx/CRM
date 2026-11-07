@@ -1,5 +1,7 @@
 "use client";
 
+import {NotificationPreferences} from "./notification-preferences";
+import {PersonAvatar,usePeople} from "./people-provider";
 import { Bell, CalendarClock, CheckCheck, CircleCheck, ListChecks, MessageCircle, TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -21,7 +23,7 @@ type InboxMessage = { id: string; content: string; sender_id: string; created_at
 type InboxItem =
   | ({ kind: "shared" } & SharedNotification)
   | ({ kind: "message"; read_at: null; title: string; body: string; type: "message" } & InboxMessage);
-type DisplayProfile = { id: string; full_name: string };
+
 
 function shortTime(value: string) {
   const date = new Date(value);
@@ -42,7 +44,9 @@ export function NotificationsMenu({ userId, onOpenChat }: { userId: string | nul
   const toast = useAppToast();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<InboxItem[]>([]);
-  const [names, setNames] = useState<Record<string, string>>({});
+  const people=usePeople();const peopleRef=useRef(people);const seen=useRef(new Set<string>());
+  useEffect(()=>{peopleRef.current=people;},[people]);
+  const messageToast=useCallback((message:{id:string;sender_id:string;message_type?:string;content?:string;image_path?:string|null})=>{if(message.sender_id===userId||seen.current.has(message.id))return;seen.current.add(message.id);if(seen.current.size>1000)seen.current.delete(seen.current.values().next().value!);const actor=peopleRef.current[message.sender_id];const body=message.message_type==="audio"?"Enviou um áudio.":message.image_path&&!message.content?"Enviou uma imagem.":message.content?.slice(0,160)||"Nova mensagem no bate-papo.";toast(body,"info",{actor:actor||null,action:{label:"Ler",run:onOpenChat}});},[userId,toast,onOpenChat]);
   const [loading, setLoading] = useState(Boolean(supabase && userId));
   const [error, setError] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
@@ -77,12 +81,6 @@ export function NotificationsMenu({ userId, onOpenChat }: { userId: string | nul
     mixed.sort((first, second) => second.created_at.localeCompare(first.created_at));
     setItems(mixed.slice(0, 35));
 
-    const senderIds = [...new Set(messages.map((message) => message.sender_id))];
-    if (senderIds.length) {
-      const { data: profiles } = await supabase.from("chat_profiles").select("id,full_name").in("id", senderIds);
-      if (profiles) setNames(Object.fromEntries((profiles as DisplayProfile[]).map((profile) => [profile.id, profile.full_name])));
-    }
-
     const missingTable = notificationResult.error?.code === "42P01" || notificationResult.error?.code === "PGRST205";
     setError(notificationResult.error && !missingTable ? "Não foi possível carregar os avisos compartilhados." : "");
     setLoading(false);
@@ -94,12 +92,12 @@ export function NotificationsMenu({ userId, onOpenChat }: { userId: string | nul
     const channel = supabase.channel(`notifications-${userId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `recipient_id=eq.${userId}` }, (payload) => {
         const notification = payload.new as SharedNotification;
-        toast(`${notification.title}: ${notification.body}`, "info");
+        if(notification.actor_id!==userId)toast(`${notification.title}: ${notification.body}`, "info",{actor:notification.actor_id?peopleRef.current[notification.actor_id]||null:null});
         void load();
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
         const message = payload.new as InboxMessage;
-        if (message.sender_id !== userId) toast("Nova mensagem da equipe.", "info");
+        messageToast(message);
         void load();
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "message_reads" }, () => void load())
@@ -107,7 +105,9 @@ export function NotificationsMenu({ userId, onOpenChat }: { userId: string | nul
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "notifications", filter: `recipient_id=eq.${userId}` }, () => void load())
       .subscribe();
     return () => { window.clearTimeout(loadTimer); void supabase.removeChannel(channel); };
-  }, [supabase, userId, load, toast]);
+  }, [supabase, userId, load, toast,messageToast]);
+
+  useEffect(()=>{if(!("serviceWorker" in navigator))return;const receive=(event:MessageEvent)=>{if(event.data?.type==="PROSPECTA_OPEN_CHAT")onOpenChat();if(event.data?.type==="PROSPECTA_PUSH"){const payload=event.data.data;if(payload?.id&&payload?.senderId){messageToast({id:payload.id,sender_id:payload.senderId});void load();}}};navigator.serviceWorker.addEventListener("message",receive);return()=>navigator.serviceWorker.removeEventListener("message",receive);},[onOpenChat,messageToast,load]);
 
   useEffect(() => {
     if (!open) return;
@@ -172,17 +172,18 @@ export function NotificationsMenu({ userId, onOpenChat }: { userId: string | nul
           <div className="notifications-list">
             {loading ? <p className="notifications-empty" role="status">Carregando…</p> : items.length ? items.map((item) => {
               const Icon = iconFor(item.type);
-              const actorName = item.kind === "message" ? names[item.sender_id] || "Equipe" : item.title;
+              const actorName = item.kind === "message" ? people[item.sender_id]?.name || "Equipe" : item.title;
+              const actor=people[item.kind==="message"?item.sender_id:item.actor_id||""];
               const body = item.kind === "message" ? item.body : item.body;
               return (
                 <button className={`notification-item ${item.read_at ? "is-read" : ""}`} type="button" key={`${item.kind}-${item.id}`} onClick={() => void openItem(item)}>
-                  <span className="notification-message-icon"><Icon size={15} /></span>
+                  {actor?<PersonAvatar person={actor} size={34}/>:<span className="notification-message-icon"><Icon size={15} /></span>}
                   <span className="notification-message-copy"><strong>{actorName}</strong><span>{body}</span><time dateTime={item.created_at}>{shortTime(item.created_at)}</time></span>
                   {!item.read_at && <span className="notification-unread-dot" aria-label="Não lida" />}
                 </button>
               );
             }) : <p className="notifications-empty">Nenhuma atividade nova por enquanto.</p>}
-          </div>
+          </div><NotificationPreferences/>
         </section>
       )}
     </div>

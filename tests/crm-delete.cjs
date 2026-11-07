@@ -1,0 +1,24 @@
+const fs=require('node:fs');
+const path=require('node:path');
+const Module=require('node:module');
+const assert=require('node:assert/strict');
+const ts=require('typescript');
+const id='11111111-1111-4111-8111-111111111111';
+let allowed=true,origin=true,deleted=0,result={data:{id},error:null};
+const filters=[];
+const chain={delete(){deleted++;return this;},eq(key,value){filters.push([key,value]);return this;},select(){return this;},async maybeSingle(){return result;}};
+const server={requireCrm:async()=>allowed?{client:{from:()=>chain},admin:{},user:{id}}:{error:Response.json({error:'Sem acesso'},{status:401})},uuid:v=>typeof v==='string'&&/^[a-f\d-]{36}$/i.test(v),text:(v,max,required)=>{if(typeof v!=='string'||v.length>max||(required&&!v.trim()))throw new Error('Nome inválido');return v.trim();}};
+const filename=path.resolve('src/app/api/crm/route.ts');
+const route=new Module(filename,module);route.filename=filename;route.paths=module.paths;
+route.require=function(name){if(name==='@/lib/crm-server')return server;if(name==='@/lib/admin-users')return {isSameOriginMutation:()=>origin};if(name==='@/lib/crm-types')return {stages:[]};if(name==='@/lib/crm-insights')return {lostReasons:[],discardReasons:[]};return require(name);};
+route._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,filename);
+const send=(values={})=>route.exports.POST(new Request('https://example.test/api/crm',{method:'POST',body:JSON.stringify({action:'delete_lead',id,confirm_name:'FIXTURE',...values})}));
+(async()=>{
+ origin=false;assert.equal((await send()).status,403);assert.equal(deleted,0);
+ origin=true;allowed=false;assert.equal((await send()).status,401);assert.equal(deleted,0);
+ allowed=true;assert.equal((await send({id:'bad'})).status,400);assert.equal((await send({confirm_name:''})).status,400);assert.equal(deleted,0);
+ assert.equal((await send()).status,200);assert.deepEqual(filters,[['id',id],['name','FIXTURE']]);
+ result={data:null,error:null};assert.equal((await send()).status,409);
+ result={data:null,error:{message:'database internal details'}};const failed=await send();assert.equal(failed.status,400);assert.ok(!(await failed.text()).includes('database internal details'));
+ console.log('PASS: exclusão autenticada, origem, UUID, confirmação do nome, concorrência e falha do banco. Sem acesso à produção.');
+})().catch(error=>{console.error(error);process.exitCode=1;});

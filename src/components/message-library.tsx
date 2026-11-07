@@ -1,5 +1,6 @@
 "use client";
 
+import {AppDialog} from "./app-dialog";
 import { BookOpenText, Pencil, Plus, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
@@ -146,8 +147,8 @@ export function MessageLibrary({ userId, onOpenWhatsApp }: { userId: string | nu
     </section>
     <p className="message-library-footnote">Copiar não envia a mensagem. Para iniciar uma conversa pela API fora da janela de atendimento, use um modelo aprovado na Meta.</p>
 
-    {editorOpen && <div className="message-editor-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSaving) setEditorOpen(false); }}>
-      <section className="message-editor" role="dialog" aria-modal="true" aria-labelledby="message-editor-title">
+    {editorOpen && <AppDialog label={editingId?"Editar mensagem":"Nova mensagem"} onClose={()=>setEditorOpen(false)} busy={isSaving} className="app-message-dialog">
+      <section className="message-editor" aria-labelledby="message-editor-title">
         <header><div><h2 id="message-editor-title">{editingId ? "Editar mensagem" : "Nova mensagem"}</h2><p>Escreva como você falaria com o cliente.</p></div><button className="icon-button" type="button" onClick={() => setEditorOpen(false)} disabled={isSaving} aria-label="Fechar editor"><X size={18} /></button></header>
         <form onSubmit={saveMessage}>
           <label>Título<input ref={titleInput} value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} minLength={3} maxLength={100} placeholder="Ex.: Cliente pediu mais detalhes" required /></label>
@@ -157,6 +158,6 @@ export function MessageLibrary({ userId, onOpenWhatsApp }: { userId: string | nu
           <footer><button className="secondary-button" type="button" onClick={() => setEditorOpen(false)} disabled={isSaving}>Cancelar</button><button className="primary-button" type="submit" disabled={isSaving}>{isSaving ? "Salvando..." : editingId ? "Salvar alterações" : "Salvar mensagem"}</button></footer>
         </form>
       </section>
-    </div>}
+    </AppDialog>}
   </div>;
 }
