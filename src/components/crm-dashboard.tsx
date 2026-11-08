@@ -21,7 +21,7 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
-import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
@@ -364,8 +364,26 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false, initialView,
 }
 
 function PipelineBoard({ leads, loading, error, onMove, onFavoriteChange, onNotice, onSelect, onAdd, showList }: { leads: Lead[]; loading: boolean; error: boolean; onMove: (id: string, status: LeadStatus) => Promise<void>; onFavoriteChange: (id: string, favorite: boolean) => Promise<void>; onNotice: (message: string) => void; onSelect: (lead: Lead) => void; onAdd: () => void; showList: boolean }) {
+  const panRef = useRef<{ id: number; x: number; left: number } | null>(null);
+  const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (event.button !== 0 || target.closest(".lead-card, button, a, input, select, textarea, [role='menu']")) return;
+    panRef.current = { id: event.pointerId, x: event.clientX, left: event.currentTarget.scrollLeft };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.classList.add("is-panning");
+  };
+  const movePan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const pan = panRef.current;
+    if (pan) event.currentTarget.scrollLeft = pan.left - (event.clientX - pan.x);
+  };
+  const endPan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!panRef.current) return;
+    panRef.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    event.currentTarget.classList.remove("is-panning");
+  };
   if (showList) return <LeadsTable leads={leads} loading={loading} error={error} onSelect={onSelect} onStageChange={onMove} onFavoriteChange={onFavoriteChange} onNotice={onNotice} />;
-  return <div className="kanban-grid">{stages.map((stage) => { const stageLeads = leads.filter((lead) => lead.status === stage.slug); return <div className="kanban-column" key={stage.slug} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("leadId"); if (id) onMove(id, stage.slug); }}><div className="kanban-column-header"><div><span className="stage-dot" style={{ backgroundColor: stage.color }} /><h3>{stage.name}</h3><span className="column-count">{stageLeads.length}</span></div><ActionsButton label={`Opções de ${stage.name}`} actions={[{label:"Adicionar lead",run:onAdd},{label:"Copiar nomes desta etapa",disabled:!stageLeads.length,run:()=>{void navigator.clipboard.writeText(stageLeads.map(l=>l.name).join("\n")).then(()=>onNotice("Nomes copiados."),()=>onNotice("Não foi possível copiar."));}}]}/></div><div className="kanban-cards">{stageLeads.map((lead) => <LeadCard key={lead.id} lead={lead} onSelect={onSelect} />)}{stageLeads.length === 0 && <div className="empty-column">Solte um lead aqui</div>}</div><button className="add-card-button" onClick={onAdd}><Plus size={15} /> Adicionar lead</button></div>; })}</div>;
+  return <div className="kanban-grid" onPointerDown={startPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan}>{stages.map((stage) => { const stageLeads = leads.filter((lead) => lead.status === stage.slug); return <div className="kanban-column" key={stage.slug} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("leadId"); if (id) onMove(id, stage.slug); }}><div className="kanban-column-header"><div><span className="stage-dot" style={{ backgroundColor: stage.color }} /><h3>{stage.name}</h3><span className="column-count">{stageLeads.length}</span></div><ActionsButton label={`Opções de ${stage.name}`} actions={[{label:"Adicionar lead",run:onAdd},{label:"Copiar nomes desta etapa",disabled:!stageLeads.length,run:()=>{void navigator.clipboard.writeText(stageLeads.map(l=>l.name).join("\n")).then(()=>onNotice("Nomes copiados."),()=>onNotice("Não foi possível copiar."));}}]}/></div><div className="kanban-cards">{stageLeads.map((lead) => <LeadCard key={lead.id} lead={lead} onSelect={onSelect} />)}{stageLeads.length === 0 && <div className="empty-column">Solte um lead aqui</div>}</div><button className="add-card-button" onClick={onAdd}><Plus size={15} /> Adicionar lead</button></div>; })}</div>;
 }
 
 function LeadCard({ lead, onSelect }: { lead: Lead; onSelect: (lead: Lead) => void }) {

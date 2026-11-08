@@ -147,7 +147,9 @@
  .crm-transition-list button { flex-wrap: wrap; }
 }
 @media(prefers-reduced-motion:reduce) { .crm-loading-line { animation: none; } .crm-stage-bars b { transition: none; } }
-.crm-shell .kanban-grid { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 240px; }
+.crm-shell .kanban-grid { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 240px; cursor: grab; user-select: none; }
+.crm-shell .kanban-grid.is-panning { cursor: grabbing; }
+.crm-shell .kanban-grid.is-panning .lead-card { pointer-events: none; }
 .crm-saved-filters { display: grid; gap: 5px; font-size: 10px; color: var(--crm-muted); }
 .crm-saved-filters > div { display: flex; gap: 12px; }
 .crm-shell .lead-card .crm-card-value { color: var(--crm-text); font-weight: 600; min-height: 0; margin-block: 8px; }
