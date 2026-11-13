@@ -31,6 +31,7 @@ import { MessagesWidget } from "@/components/collaboration";
 import { EventCalendarModule } from "@/components/event-calendar";
 import { CalendarIntegrationsModule } from "@/components/calendar-integrations";
 import { LeadsTable } from "@/components/examples/c-table-7";
+import { PriceCalculator } from "@/components/price-calculator";
 import { ProfilePage, type Profile } from "@/components/profile-page";
 import { NotificationsMenu } from "@/components/notifications-menu";
 import { PresenceTracker } from "@/components/presence-tracker";
@@ -57,11 +58,11 @@ import { CanvasWorkspace } from "@/components/canvas-workspace";
 import { CommercialDocuments } from "@/components/contracts-library";
 import { PlansWorkspace } from "@/components/plans-workspace";
 
-type View = "analytics" | "audit" | "documents" | "canvas" | "plans" | "company" | "overview" | "leads" | "pipeline" | "prospecting" | "messages" | "whatsapp" | "tasks" | "calendar" | "settings" | "profile" | "users";
+type View = "calculator" | "analytics" | "audit" | "documents" | "canvas" | "plans" | "company" | "overview" | "leads" | "pipeline" | "prospecting" | "messages" | "whatsapp" | "tasks" | "calendar" | "settings" | "profile" | "users";
 
 type NavGroup = { id: string; label: string; icon: typeof LayoutDashboard; items: { label: string; view: View; adminOnly?: boolean }[] };
 const navGroups: NavGroup[] = [
-  { id: "commercial", label: "Comercial", icon: Target, items: [{ label: "Pipeline", view: "pipeline" }, { label: "Encontrar leads", view: "prospecting" }, { label: "Analytics", view: "analytics" }] },
+  { id: "commercial", label: "Comercial", icon: Target, items: [{ label: "Pipeline", view: "pipeline" }, { label: "Encontrar leads", view: "prospecting" }, { label: "Calculadora", view: "calculator" }, { label: "Analytics", view: "analytics" }] },
   { id: "communication", label: "Comunicação", icon: MessageCircle, items: [{ label: "WhatsApp", view: "whatsapp" }, { label: "Mensagens prontas", view: "messages" }] },
   { id: "work", label: "Trabalho", icon: BookOpenText, items: [{ label: "Tarefas", view: "tasks" }, { label: "Agenda", view: "calendar" }, { label: "Canvas", view: "canvas" }, { label: "Documentos", view: "documents" }] },
   { id: "management", label: "Gestão", icon: Settings, items: [{ label: "Integrações", view: "settings" }, { label: "Auditoria", view: "audit" }, { label: "Planos", view: "plans", adminOnly: true }, { label: "Empresa", view: "company", adminOnly: true }, { label: "Usuários", view: "users", adminOnly: true }] },
@@ -291,7 +292,7 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false, initialView,
       <main className="main-content">
         <header className="topbar">
           <div className="topbar-left"><button className="icon-button mobile-menu-button" onClick={() => setMobileMenuOpen(true)} aria-label="Abrir menu"><Menu size={20} /></button><button className="icon-button desktop-panel-button" aria-label="Alternar painel"><PanelLeft size={19} /></button><div className="breadcrumb"><span>Prospecta</span><ChevronRight size={14} /><strong>{view === "analytics" ? "Analytics" : view === "audit" ? "Auditoria" : view === "documents" ? "Documentos" : view === "canvas" ? "Canvas" : view === "plans" ? "Planos" : view === "company" ? "Empresa" : view === "profile" ? "Meu perfil" : view === "users" ? "Usuários" : view === "pipeline" ? "Pipeline" : view === "leads" ? "Leads" : view === "prospecting" ? "Encontrar leads" : view === "messages" ? "Mensagens prontas" : view === "whatsapp" ? "WhatsApp" : view === "tasks" ? "Tarefas" : view === "calendar" ? "Agenda" : view === "settings" ? "Configurações" : "Visão geral"}</strong></div></div>
-          <div className="topbar-actions">{!["overview", "analytics", "audit", "profile", "users", "messages", "whatsapp", "settings", "plans", "company"].includes(view) && <button className="dashboard-period" type="button" title="Período atual"><Clock3 size={14} /> Todos os registros <ChevronDown size={14} /></button>}<NotificationsMenu userId={currentProfile?.id ?? null} onOpenChat={openChat} /></div>
+          <div className="topbar-actions">{!["overview", "analytics", "audit", "profile", "users", "messages", "whatsapp", "settings", "plans", "company", "calculator"].includes(view) && <button className="dashboard-period" type="button" title="Período atual"><Clock3 size={14} /> Todos os registros <ChevronDown size={14} /></button>}<NotificationsMenu userId={currentProfile?.id ?? null} onOpenChat={openChat} /></div>
         </header>
         <div className="page-wrap">
           {view === "documents" ? (
@@ -304,6 +305,8 @@ export function CrmDashboard({ userEmail, profile, isAdmin = false, initialView,
             <ProfilePage profile={currentProfile} email={userEmail} onSaved={setCurrentProfile} onSignOut={signOut} />
           ) : view === "users" && isAdmin ? (
             <UserManagement currentUserId={currentProfile?.id ?? ""} />
+          ) : view === "calculator" ? (
+            <PriceCalculator />
           ) : view === "prospecting" ? (
             <LeadSearchModule onImported={handleImported} onNotice={message=>toast(message,"info")} />
           ) : view === "messages" ? (
